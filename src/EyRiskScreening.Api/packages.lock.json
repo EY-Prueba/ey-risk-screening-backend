@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "eyriskscreening.application": {
+        "type": "Project",
+        "dependencies": {
+          "EyRiskScreening.Domain": "[1.0.0, )"
+        }
+      },
+      "eyriskscreening.domain": {
+        "type": "Project"
+      },
+      "eyriskscreening.infrastructure": {
+        "type": "Project",
+        "dependencies": {
+          "EyRiskScreening.Application": "[1.0.0, )",
+          "EyRiskScreening.Domain": "[1.0.0, )"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\EyRiskScreening.Application\EyRiskScreening.Application.csproj" />
+    <ProjectReference Include="..\EyRiskScreening.Domain\EyRiskScreening.Domain.csproj" />
+  </ItemGroup>
+</Project>

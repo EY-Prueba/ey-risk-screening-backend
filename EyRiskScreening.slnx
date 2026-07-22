@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EyRiskScreening.Api/EyRiskScreening.Api.csproj" />
+    <Project Path="src/EyRiskScreening.Application/EyRiskScreening.Application.csproj" />
+    <Project Path="src/EyRiskScreening.Domain/EyRiskScreening.Domain.csproj" />
+    <Project Path="src/EyRiskScreening.Infrastructure/EyRiskScreening.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EyRiskScreening.IntegrationTests/EyRiskScreening.IntegrationTests.csproj" />
+    <Project Path="tests/EyRiskScreening.UnitTests/EyRiskScreening.UnitTests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,31 @@
+# Build output
+**/bin/
+**/obj/
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# IDE and user settings
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+secrets.json
+
+# Docker and local data
+.docker/
+docker-data/
+
+# Operating system files
+.DS_Store
+Thumbs.db

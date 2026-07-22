@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="..\EyRiskScreening.Application\EyRiskScreening.Application.csproj" />
+    <ProjectReference Include="..\EyRiskScreening.Infrastructure\EyRiskScreening.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>
