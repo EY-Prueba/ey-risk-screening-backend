@@ -60,8 +60,7 @@ public sealed class LayerDependencyTests
             .Descendants(ProjectReferenceElement)
             .Select(reference => reference.Attribute("Include")?.Value)
             .Where(reference => !string.IsNullOrWhiteSpace(reference))
-            .Select(reference => Path.GetFullPath(Path.Combine(projectDirectory, reference!)))
-            .Select(reference => Path.GetRelativePath(repositoryRoot, reference).Replace('\\', '/'))
+            .Select(reference => NormalizeProjectReference(repositoryRoot, projectDirectory, reference!))
             .Order(StringComparer.Ordinal)
             .ToArray();
 
@@ -86,5 +85,26 @@ public sealed class LayerDependencyTests
     }
 
     private static string NormalizePath(string path) =>
-        path.Replace('/', Path.DirectorySeparatorChar);
+        path
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+
+    private static string NormalizeProjectReference(
+        string repositoryRoot,
+        string projectDirectory,
+        string projectReference)
+    {
+        var absolutePath = Path.GetFullPath(
+            Path.Combine(projectDirectory, NormalizePath(projectReference)));
+        var relativePath = Path.GetRelativePath(repositoryRoot, absolutePath)
+            .Replace(Path.DirectorySeparatorChar, '/')
+            .Replace(Path.AltDirectorySeparatorChar, '/');
+
+        while (relativePath.StartsWith("./", StringComparison.Ordinal))
+        {
+            relativePath = relativePath[2..];
+        }
+
+        return relativePath;
+    }
 }
