@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text.Json.Serialization;
+using EyRiskScreening.Api.Screening;
 using EyRiskScreening.Application;
 using EyRiskScreening.Application.Authentication;
 using EyRiskScreening.Infrastructure;
@@ -15,6 +17,7 @@ _ = typeof(InfrastructureAssemblyMarker);
 
 builder.Services.AddScoped<LoginService>();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddScreeningCore(builder.Configuration);
 
 builder.Services.AddProblemDetails(options =>
 {
@@ -46,7 +49,11 @@ builder.Services
     });
 });
 
-builder.Services.AddControllers();
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(
+            new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false)));
 
 var app = builder.Build();
 
@@ -73,6 +80,7 @@ app.UseStatusCodePages(async statusCodeContext =>
 app.UseCors(corsPolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 await app.Services.BootstrapIdentityAsync();
 

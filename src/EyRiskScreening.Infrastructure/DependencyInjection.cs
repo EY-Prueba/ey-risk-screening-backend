@@ -1,8 +1,10 @@
 using EyRiskScreening.Application.Authentication;
+using EyRiskScreening.Application.Screening;
 using EyRiskScreening.Application.Security;
 using EyRiskScreening.Domain.Security;
 using EyRiskScreening.Infrastructure.Identity;
 using EyRiskScreening.Infrastructure.Persistence;
+using EyRiskScreening.Infrastructure.Screening;
 using EyRiskScreening.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -116,6 +118,7 @@ public static class DependencyInjection
         services.AddScoped<IUserCredentialValidator, IdentityCredentialValidator>();
         services.AddScoped<IAccessTokenIssuer, JwtAccessTokenIssuer>();
         services.AddScoped<IdentityBootstrapper>();
+        services.AddSingleton<IScreeningFailureReporter, LoggingScreeningFailureReporter>();
 
         return services;
     }
