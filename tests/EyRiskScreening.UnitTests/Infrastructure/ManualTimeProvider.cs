@@ -1,9 +1,9 @@
-namespace EyRiskScreening.IntegrationTests.Infrastructure;
+namespace EyRiskScreening.UnitTests.Infrastructure;
 
-public sealed class MutableTimeProvider(DateTimeOffset utcNow) : TimeProvider
+internal sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider
 {
     private readonly object _sync = new();
-    private readonly List<MutableTimer> _timers = [];
+    private readonly List<ManualTimer> _timers = [];
     private DateTimeOffset _utcNow = utcNow;
     private long _timestamp;
 
@@ -32,7 +32,7 @@ public sealed class MutableTimeProvider(DateTimeOffset utcNow) : TimeProvider
         TimeSpan period)
     {
         ArgumentNullException.ThrowIfNull(callback);
-        var timer = new MutableTimer(this, callback, state, dueTime, period);
+        var timer = new ManualTimer(this, callback, state, dueTime, period);
 
         lock (_sync)
         {
@@ -54,7 +54,7 @@ public sealed class MutableTimeProvider(DateTimeOffset utcNow) : TimeProvider
 
         while (true)
         {
-            MutableTimer[] dueTimers;
+            ManualTimer[] dueTimers;
             lock (_sync)
             {
                 dueTimers = _timers
@@ -79,17 +79,17 @@ public sealed class MutableTimeProvider(DateTimeOffset utcNow) : TimeProvider
         }
     }
 
-    private sealed class MutableTimer : ITimer
+    private sealed class ManualTimer : ITimer
     {
-        private readonly MutableTimeProvider _owner;
+        private readonly ManualTimeProvider _owner;
         private readonly TimerCallback _callback;
         private readonly object? _state;
         private long _dueTimestamp = long.MaxValue;
         private long _periodTicks = Timeout.InfiniteTimeSpan.Ticks;
         private bool _disposed;
 
-        public MutableTimer(
-            MutableTimeProvider owner,
+        public ManualTimer(
+            ManualTimeProvider owner,
             TimerCallback callback,
             object? state,
             TimeSpan dueTime,

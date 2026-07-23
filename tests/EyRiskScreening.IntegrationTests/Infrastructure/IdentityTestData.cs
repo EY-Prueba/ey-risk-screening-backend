@@ -33,6 +33,41 @@ internal static class IdentityTestData
         return user;
     }
 
+    public static async Task<ApplicationUser> CreateUserWithoutRoleAsync(
+        IServiceProvider services,
+        string userName,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await using var scope = services.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = userName,
+            Email = $"{userName}@tests.local",
+        };
+
+        var creation = await userManager.CreateAsync(user, ValidPassword);
+        EnsureSucceeded(creation, $"create test user '{userName}'");
+        return user;
+    }
+
+    public static async Task AddUserToRoleAsync(
+        IServiceProvider services,
+        Guid userId,
+        string role,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await using var scope = services.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.FindByIdAsync(userId.ToString())
+            ?? throw new InvalidOperationException($"Test user '{userId}' was not found.");
+        var assignment = await userManager.AddToRoleAsync(user, role);
+        EnsureSucceeded(assignment, $"assign role '{role}' to test user '{user.UserName}'");
+    }
+
     private static void EnsureSucceeded(IdentityResult result, string operation)
     {
         if (result.Succeeded)

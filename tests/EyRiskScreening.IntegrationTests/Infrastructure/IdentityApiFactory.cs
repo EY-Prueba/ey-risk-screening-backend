@@ -12,7 +12,9 @@ public sealed class IdentityApiFactory(
     string connectionString,
     MutableTimeProvider timeProvider,
     BootstrapSettings? bootstrap = null,
-    string[]? allowedOrigins = null) : WebApplicationFactory<Program>
+    string[]? allowedOrigins = null,
+    IReadOnlyDictionary<string, string?>? configurationOverrides = null,
+    Action<IServiceCollection>? configureTestServices = null) : WebApplicationFactory<Program>
 {
     private readonly string _signingKeyBase64 = Convert.ToBase64String(
         RandomNumberGenerator.GetBytes(32));
@@ -47,6 +49,14 @@ public sealed class IdentityApiFactory(
                 }
             }
 
+            if (configurationOverrides is not null)
+            {
+                foreach (var (key, value) in configurationOverrides)
+                {
+                    values[key] = value;
+                }
+            }
+
             configuration.AddInMemoryCollection(values);
         });
 
@@ -57,6 +67,7 @@ public sealed class IdentityApiFactory(
             services
                 .AddControllers()
                 .AddApplicationPart(typeof(AuthorizationProbeController).Assembly);
+            configureTestServices?.Invoke(services);
         });
     }
 }
