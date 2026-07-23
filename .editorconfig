@@ -16,3 +16,6 @@ csharp_style_namespace_declarations = file_scoped:warning
 
 [*.{csproj,props,targets,slnx}]
 indent_size = 2
+
+[src/EyRiskScreening.Infrastructure/Persistence/Migrations/*.cs]
+generated_code = true
