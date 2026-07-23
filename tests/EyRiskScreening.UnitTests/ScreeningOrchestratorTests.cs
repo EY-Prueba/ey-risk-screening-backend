@@ -291,8 +291,14 @@ public sealed class ScreeningOrchestratorTests
             request,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, Assert.Single(Assert.IsType<ScreeningRunResult>(acceptedResult.Run).Sources).Hits);
-        Assert.Equal(0, Assert.Single(Assert.IsType<ScreeningRunResult>(rejectedResult.Run).Sources).Hits);
+        var acceptedSource = Assert.Single(
+            Assert.IsType<ScreeningRunResult>(acceptedResult.Run).Sources);
+        var rejectedSource = Assert.Single(
+            Assert.IsType<ScreeningRunResult>(rejectedResult.Run).Sources);
+        Assert.Equal(60, acceptedSource.MatchThreshold);
+        Assert.Equal(61, rejectedSource.MatchThreshold);
+        Assert.Equal(1, acceptedSource.Hits);
+        Assert.Equal(0, rejectedSource.Hits);
     }
 
     [Fact]
