@@ -1,6 +1,7 @@
 using EyRiskScreening.Api.Configuration;
 using EyRiskScreening.Api.RateLimiting;
 using EyRiskScreening.Application.Screening;
+using EyRiskScreening.Application.Screening.History;
 using Microsoft.Extensions.Options;
 
 namespace EyRiskScreening.Api.Screening;
@@ -28,6 +29,8 @@ public static class ScreeningServiceCollectionExtensions
             ScreeningRateLimitOptionsValidator>();
 
         services.AddScoped<ScreeningOrchestrator>();
+        services.AddScoped<ExecuteScreeningService>();
+        services.AddScoped<GetScreeningRunService>();
 
         services.AddRateLimiter(options => options.AddPolicy<
             string,

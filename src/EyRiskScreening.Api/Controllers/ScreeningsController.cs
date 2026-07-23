@@ -1,8 +1,11 @@
+using System.Security.Claims;
 using EyRiskScreening.Api.Contracts.Screening;
 using EyRiskScreening.Api.RateLimiting;
 using EyRiskScreening.Application.Screening;
+using EyRiskScreening.Application.Screening.History;
 using EyRiskScreening.Application.Security;
 using EyRiskScreening.Domain.Screening;
+using EyRiskScreening.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -14,7 +17,8 @@ namespace EyRiskScreening.Api.Controllers;
 [ApiController]
 [Route("api/v1/screenings")]
 public sealed class ScreeningsController(
-    ScreeningOrchestrator orchestrator,
+    ExecuteScreeningService executeScreeningService,
+    GetScreeningRunService getScreeningRunService,
     IProblemDetailsService problemDetailsService) : ControllerBase
 {
     [Authorize(Policy = AuthorizationPolicyNames.AnalystOrAdmin)]
@@ -28,18 +32,25 @@ public sealed class ScreeningsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status504GatewayTimeout)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Screen(
         ApiScreeningRequest request,
         CancellationToken cancellationToken)
     {
+        if (!TryGetUserId(out var userId))
+        {
+            return await WriteInvalidUserIdentifierAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var applicationRequest = new ApplicationScreeningRequest(
             request.EntityName,
             request.Sources?.Select(MapSource).ToArray());
-        var execution = await orchestrator
-            .ExecuteAsync(applicationRequest, cancellationToken)
+        var execution = await executeScreeningService
+            .ExecuteAsync(userId, applicationRequest, cancellationToken)
             .ConfigureAwait(false);
 
-        if (!execution.IsValid)
+        if (execution.IsInvalid)
         {
             foreach (var error in execution.ValidationErrors)
             {
@@ -49,14 +60,68 @@ public sealed class ScreeningsController(
             return ValidationProblem(ModelState);
         }
 
-        var run = execution.Run
-            ?? throw new InvalidOperationException("A valid screening execution must contain a run result.");
+        if (!execution.IsPersisted)
+        {
+            return await WriteTechnicalFailureAsync(
+                StatusCodes.Status500InternalServerError,
+                "Internal Server Error",
+                "urn:ey-risk-screening:problem:screening-persistence-failed",
+                nameof(ScreeningHistoryErrorCode.ScreeningPersistenceFailed),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var run = execution.Run!;
         if (run.Status != ScreeningRunStatus.Failed)
         {
             return Ok(MapResponse(run));
         }
 
         return await WriteGlobalFailureAsync(run, cancellationToken).ConfigureAwait(false);
+    }
+
+    [Authorize(Policy = AuthorizationPolicyNames.AnalystOrAdmin)]
+    [HttpGet("{runId:guid}")]
+    [ProducesResponseType<ScreeningResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> Get(
+        Guid runId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return await WriteInvalidUserIdentifierAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var accessScope = User.IsInRole(RoleNames.Admin)
+            ? ScreeningHistoryAccessScope.Admin
+            : ScreeningHistoryAccessScope.Analyst;
+        var result = await getScreeningRunService
+            .GetAsync(runId, userId, accessScope, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            GetScreeningRunOutcome.Found => Ok(MapResponse(result.Run!)),
+            GetScreeningRunOutcome.NotFound => await WriteTechnicalFailureAsync(
+                StatusCodes.Status404NotFound,
+                "Not Found",
+                "urn:ey-risk-screening:problem:screening-run-not-found",
+                "ScreeningRunNotFound",
+                cancellationToken).ConfigureAwait(false),
+            GetScreeningRunOutcome.ScreeningHistoryUnavailable =>
+                await WriteTechnicalFailureAsync(
+                    StatusCodes.Status500InternalServerError,
+                    "Internal Server Error",
+                    "urn:ey-risk-screening:problem:screening-history-unavailable",
+                    nameof(ScreeningHistoryErrorCode.ScreeningHistoryUnavailable),
+                    cancellationToken).ConfigureAwait(false),
+            _ => throw new InvalidOperationException(
+                "Unknown screening history result."),
+        };
     }
 
     private async Task<IActionResult> WriteGlobalFailureAsync(
@@ -108,6 +173,40 @@ public sealed class ScreeningsController(
         return new EmptyResult();
     }
 
+    private Task<IActionResult> WriteInvalidUserIdentifierAsync(
+        CancellationToken cancellationToken) =>
+        WriteTechnicalFailureAsync(
+            StatusCodes.Status401Unauthorized,
+            "Unauthorized",
+            "urn:ey-risk-screening:problem:invalid-user-identifier",
+            "InvalidUserIdentifier",
+            cancellationToken);
+
+    private async Task<IActionResult> WriteTechnicalFailureAsync(
+        int status,
+        string title,
+        string type,
+        string errorCode,
+        CancellationToken cancellationToken)
+    {
+        var problem = new ProblemDetails
+        {
+            Status = status,
+            Title = title,
+            Type = type,
+        };
+        problem.Extensions["errorCode"] = errorCode;
+        HttpContext.Response.StatusCode = status;
+
+        _ = await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = HttpContext,
+            ProblemDetails = problem,
+        }).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new EmptyResult();
+    }
+
     private static ScreeningResponse MapResponse(ScreeningRunResult run) =>
         new(
             run.RunId,
@@ -125,6 +224,7 @@ public sealed class ScreeningsController(
         new(
             MapSource(source.Source),
             MapSourceStatus(source.Status),
+            source.MatchThreshold,
             source.Hits,
             source.ReturnedResults,
             ToMilliseconds(source.Duration),
@@ -189,6 +289,21 @@ public sealed class ScreeningsController(
 
     private static long ToMilliseconds(TimeSpan duration) =>
         checked((long)Math.Round(duration.TotalMilliseconds, MidpointRounding.AwayFromZero));
+
+    private bool TryGetUserId(out Guid userId)
+    {
+        if (TryParseNonEmptyGuid(User.FindFirstValue("sub"), out userId))
+        {
+            return true;
+        }
+
+        return TryParseNonEmptyGuid(
+            User.FindFirstValue(ClaimTypes.NameIdentifier),
+            out userId);
+    }
+
+    private static bool TryParseNonEmptyGuid(string? value, out Guid userId) =>
+        Guid.TryParse(value, out userId) && userId != Guid.Empty;
 
     private sealed record GlobalFailure(
         int Status,
