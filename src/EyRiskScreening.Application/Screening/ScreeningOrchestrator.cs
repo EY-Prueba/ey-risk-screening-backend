@@ -99,17 +99,18 @@ public sealed class ScreeningOrchestrator
         CancellationToken requestCancellationToken)
     {
         var startedAt = _timeProvider.GetTimestamp();
+        var sourceOptions = _options.Sources[source];
         if (!_adapters.TryGetValue(source, out var adapter))
         {
             return CreateErrorResult(
                 source,
+                sourceOptions.MatchThreshold,
                 ScreeningSourceStatus.Unavailable,
                 ScreeningSourceErrorCode.SourceUnavailable,
                 SourceUnavailableMessage,
                 startedAt);
         }
 
-        var sourceOptions = _options.Sources[source];
         using var sourceTimeout = new CancellationTokenSource(
             TimeSpan.FromSeconds(sourceOptions.TimeoutSeconds),
             _timeProvider);
@@ -129,6 +130,7 @@ public sealed class ScreeningOrchestrator
             {
                 return CreateErrorResult(
                     source,
+                    sourceOptions.MatchThreshold,
                     ScreeningSourceStatus.TimedOut,
                     ScreeningSourceErrorCode.GlobalTimeout,
                     GlobalTimeoutMessage,
@@ -139,6 +141,7 @@ public sealed class ScreeningOrchestrator
             {
                 return CreateErrorResult(
                     source,
+                    sourceOptions.MatchThreshold,
                     ScreeningSourceStatus.TimedOut,
                     ScreeningSourceErrorCode.SourceTimedOut,
                     SourceTimedOutMessage,
@@ -160,6 +163,7 @@ public sealed class ScreeningOrchestrator
         {
             return CreateErrorResult(
                 source,
+                sourceOptions.MatchThreshold,
                 ScreeningSourceStatus.TimedOut,
                 ScreeningSourceErrorCode.GlobalTimeout,
                 GlobalTimeoutMessage,
@@ -169,6 +173,7 @@ public sealed class ScreeningOrchestrator
         {
             return CreateErrorResult(
                 source,
+                sourceOptions.MatchThreshold,
                 ScreeningSourceStatus.TimedOut,
                 ScreeningSourceErrorCode.SourceTimedOut,
                 SourceTimedOutMessage,
@@ -179,6 +184,7 @@ public sealed class ScreeningOrchestrator
             _failureReporter.ReportAdapterFailure(runId, source, exception);
             return CreateErrorResult(
                 source,
+                sourceOptions.MatchThreshold,
                 ScreeningSourceStatus.Failed,
                 ScreeningSourceErrorCode.SourceFailed,
                 SourceFailedMessage,
@@ -217,6 +223,7 @@ public sealed class ScreeningOrchestrator
         return new ScreeningSourceResult(
             source,
             ScreeningSourceStatus.Succeeded,
+            sourceOptions.MatchThreshold,
             hits.Length,
             returnedMatches.Length,
             _timeProvider.GetElapsedTime(startedAt),
@@ -226,6 +233,7 @@ public sealed class ScreeningOrchestrator
 
     private ScreeningSourceResult CreateErrorResult(
         ScreeningSource source,
+        int matchThreshold,
         ScreeningSourceStatus status,
         ScreeningSourceErrorCode errorCode,
         string errorMessage,
@@ -233,6 +241,7 @@ public sealed class ScreeningOrchestrator
         new(
             source,
             status,
+            matchThreshold,
             0,
             0,
             _timeProvider.GetElapsedTime(startedAt),

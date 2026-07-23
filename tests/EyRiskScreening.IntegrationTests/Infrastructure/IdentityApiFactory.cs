@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using EyRiskScreening.IntegrationTests.Controllers;
 using Microsoft.AspNetCore.Hosting;
@@ -5,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.IdentityModel.Tokens;
 
 namespace EyRiskScreening.IntegrationTests.Infrastructure;
 
@@ -18,6 +21,25 @@ public sealed class IdentityApiFactory(
 {
     private readonly string _signingKeyBase64 = Convert.ToBase64String(
         RandomNumberGenerator.GetBytes(32));
+
+    public string CreateAccessToken(IEnumerable<Claim> claims)
+    {
+        var now = timeProvider.GetUtcNow();
+        var credentials = new SigningCredentials(
+            new SymmetricSecurityKey(
+                Convert.FromBase64String(_signingKeyBase64)),
+            SecurityAlgorithms.HmacSha256);
+        var token = new JwtSecurityToken(
+            new JwtHeader(credentials),
+            new JwtPayload(
+                "EyRiskScreening.IntegrationTests",
+                "EyRiskScreening.IntegrationTests.Client",
+                claims,
+                now.UtcDateTime,
+                now.AddMinutes(30).UtcDateTime,
+                now.UtcDateTime));
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

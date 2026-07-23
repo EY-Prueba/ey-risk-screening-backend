@@ -39,4 +39,15 @@ internal static class ScreeningTestData
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return message;
     }
+
+    public static HttpRequestMessage CreateAuthorizedHistoryRequest(
+        string token,
+        Guid runId)
+    {
+        var message = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/v1/screenings/{runId:D}");
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return message;
+    }
 }
