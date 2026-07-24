@@ -17,4 +17,10 @@
     <ProjectReference Include="..\..\src\EyRiskScreening.Api\EyRiskScreening.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Fixtures\Ofac\*.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

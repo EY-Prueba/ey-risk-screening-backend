@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sdnList xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML">
+  <publshInformation>
+    <Publish_Date>07/23/2026</Publish_Date>
+  </publshInformation>
+  <sdnEntry>
+    <uid>1001</uid>
+    <firstName>Acme</firstName>
+    <lastName>Holdings</lastName>
+    <sdnType>Entity</sdnType>
+    <programList>
+      <program>SDGT</program>
+    </programList>
+    <akaList>
+      <aka>
+        <uid>1101</uid>
+        <type>a.k.a.</type>
+        <category>strong</category>
+        <firstName>Acme</firstName>
+        <lastName>Corporation</lastName>
+      </aka>
+      <aka>
+        <uid>1102</uid>
+        <type>a.k.a.</type>
+        <category>weak</category>
+        <lastName>A Corp</lastName>
+      </aka>
+    </akaList>
+    <addressList>
+      <address>
+        <uid>1201</uid>
+        <address1>100 Main Street</address1>
+        <city>Lima</city>
+        <country>Peru</country>
+      </address>
+    </addressList>
+    <nationalityList>
+      <nationality>
+        <uid>1301</uid>
+        <country>Peru</country>
+      </nationality>
+    </nationalityList>
+  </sdnEntry>
+</sdnList>
