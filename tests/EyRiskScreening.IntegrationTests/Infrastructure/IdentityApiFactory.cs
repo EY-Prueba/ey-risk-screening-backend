@@ -60,6 +60,7 @@ public sealed class IdentityApiFactory(
                 ["BootstrapAdmin:Enabled"] = (bootstrap is not null).ToString(),
                 ["OfacAdapter:BaseUrl"] = "http://127.0.0.1:1",
                 ["WorldBankAdapter:BaseUrl"] = "http://127.0.0.1:1/",
+                ["OffshoreLeaksAdapter:BaseUrl"] = "http://127.0.0.1:1/",
             };
 
             if (bootstrap is not null)
