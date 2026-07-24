@@ -41,6 +41,11 @@ public sealed class OfacServiceLifetimeTests
                     {
                         TimeoutSeconds = 30,
                     },
+                [EyRiskScreening.Domain.Screening.ScreeningSource.OffshoreLeaks] =
+                    new ScreeningSourceOptions
+                    {
+                        TimeoutSeconds = 20,
+                    },
             },
         });
         builder.Services.RemoveAll<IOfacClient>();
@@ -124,6 +129,20 @@ public sealed class OfacServiceLifetimeTests
             ["WorldBankAdapter:RowSelector"] =
                 "#k-debarred-firms .k-grid-content tbody tr",
             ["WorldBankAdapter:UserAgent"] = "EY-Risk-Screening-Tests/1.0",
+            ["OffshoreLeaksAdapter:BaseUrl"] = "http://127.0.0.1:12345/",
+            ["OffshoreLeaksAdapter:QueryCacheTtlMinutes"] = "30",
+            ["OffshoreLeaksAdapter:QueryCacheMaxEntries"] = "500",
+            ["OffshoreLeaksAdapter:EntityCacheTtlHours"] = "6",
+            ["OffshoreLeaksAdapter:EntityCacheMaxEntries"] = "5000",
+            ["OffshoreLeaksAdapter:MaxCandidatesPerNamespace"] = "25",
+            ["OffshoreLeaksAdapter:MaxCandidatesBeforeDeduplication"] = "125",
+            ["OffshoreLeaksAdapter:MaxExtensionIds"] = "25",
+            ["OffshoreLeaksAdapter:MaxConcurrentRequests"] = "2",
+            ["OffshoreLeaksAdapter:MaxRequestsPerQuery"] = "10",
+            ["OffshoreLeaksAdapter:MaxQueryResponseBytes"] = "524288",
+            ["OffshoreLeaksAdapter:MaxExtensionResponseBytes"] = "1048576",
+            ["OffshoreLeaksAdapter:MaxJsonDepth"] = "16",
+            ["OffshoreLeaksAdapter:UserAgent"] = "EY-Risk-Screening-Tests/1.0",
         };
 
     private sealed class FixedOfacClient : IOfacClient

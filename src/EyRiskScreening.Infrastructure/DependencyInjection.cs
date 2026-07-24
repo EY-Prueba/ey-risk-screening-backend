@@ -7,6 +7,7 @@ using EyRiskScreening.Infrastructure.Identity;
 using EyRiskScreening.Infrastructure.Persistence;
 using EyRiskScreening.Infrastructure.Persistence.Screening;
 using EyRiskScreening.Infrastructure.Screening;
+using EyRiskScreening.Infrastructure.Screening.OffshoreLeaks;
 using EyRiskScreening.Infrastructure.Screening.Ofac;
 using EyRiskScreening.Infrastructure.Screening.WorldBank;
 using EyRiskScreening.Infrastructure.Security;
@@ -96,6 +97,47 @@ public static class DependencyInjection
         services.AddSingleton<WorldBankScreeningSourceAdapter>();
         services.AddSingleton<IScreeningSourceAdapter>(serviceProvider =>
             serviceProvider.GetRequiredService<WorldBankScreeningSourceAdapter>());
+
+        services
+            .AddOptions<OffshoreLeaksAdapterOptions>()
+            .Bind(configuration.GetSection(
+                OffshoreLeaksAdapterOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<
+            IValidateOptions<OffshoreLeaksAdapterOptions>,
+            OffshoreLeaksAdapterOptionsValidator>();
+        services
+            .AddHttpClient(
+                IcijReconciliationClient.ClientName,
+                (serviceProvider, client) =>
+                {
+                    var options = serviceProvider
+                        .GetRequiredService<
+                            IOptions<OffshoreLeaksAdapterOptions>>()
+                        .Value;
+                    client.BaseAddress = new Uri(
+                        $"{options.BaseUrl.TrimEnd('/')}/",
+                        UriKind.Absolute);
+                    client.Timeout = Timeout.InfiniteTimeSpan;
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                        options.UserAgent);
+                })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                AutomaticDecompression = System.Net.DecompressionMethods.All,
+                Credentials = null,
+                DefaultProxyCredentials = null,
+                UseCookies = false,
+            });
+        services.AddSingleton<OffshoreLeaksHttpGate>();
+        services.AddSingleton<IIcijReconciliationClient, IcijReconciliationClient>();
+        services.AddSingleton<IIcijExtensionClient, IcijExtensionClient>();
+        services.AddSingleton<OffshoreLeaksCache>();
+        services.AddSingleton<OffshoreLeaksScreeningSourceAdapter>();
+        services.AddSingleton<IScreeningSourceAdapter>(serviceProvider =>
+            serviceProvider.GetRequiredService<
+                OffshoreLeaksScreeningSourceAdapter>());
 
         services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =>
         {
