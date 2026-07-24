@@ -33,5 +33,8 @@ jobs:
       - name: Build
         run: dotnet build EyRiskScreening.slnx --configuration Release --no-restore
 
+      - name: Install Playwright Chromium
+        run: pwsh tests/EyRiskScreening.IntegrationTests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+
       - name: Test
         run: dotnet test EyRiskScreening.slnx --configuration Release --no-build

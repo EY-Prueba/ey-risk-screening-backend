@@ -8,6 +8,7 @@ using EyRiskScreening.Infrastructure.Persistence;
 using EyRiskScreening.Infrastructure.Persistence.Screening;
 using EyRiskScreening.Infrastructure.Screening;
 using EyRiskScreening.Infrastructure.Screening.Ofac;
+using EyRiskScreening.Infrastructure.Screening.WorldBank;
 using EyRiskScreening.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -81,6 +82,20 @@ public static class DependencyInjection
         services.AddSingleton<OfacScreeningSourceAdapter>();
         services.AddSingleton<IScreeningSourceAdapter>(serviceProvider =>
             serviceProvider.GetRequiredService<OfacScreeningSourceAdapter>());
+
+        services
+            .AddOptions<WorldBankAdapterOptions>()
+            .Bind(configuration.GetSection(WorldBankAdapterOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<
+            IValidateOptions<WorldBankAdapterOptions>,
+            WorldBankAdapterOptionsValidator>();
+        services.AddSingleton<WorldBankDomParser>();
+        services.AddSingleton<IWorldBankBrowserClient, WorldBankBrowserClient>();
+        services.AddSingleton<WorldBankDatasetProvider>();
+        services.AddSingleton<WorldBankScreeningSourceAdapter>();
+        services.AddSingleton<IScreeningSourceAdapter>(serviceProvider =>
+            serviceProvider.GetRequiredService<WorldBankScreeningSourceAdapter>());
 
         services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =>
         {

@@ -2,6 +2,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using EyRiskScreening.IntegrationTests.Controllers;
+using EyRiskScreening.Infrastructure.Screening.Ofac;
+using EyRiskScreening.Infrastructure.Screening.WorldBank;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -18,7 +20,8 @@ public sealed class IdentityApiFactory(
     string[]? allowedOrigins = null,
     IReadOnlyDictionary<string, string?>? configurationOverrides = null,
     Action<IServiceCollection>? configureTestServices = null,
-    bool retainProductScreeningAdapters = false) : WebApplicationFactory<Program>
+    bool retainProductScreeningAdapters = false,
+    bool retainWorldBankAdapter = false) : WebApplicationFactory<Program>
 {
     private readonly string _signingKeyBase64 = Convert.ToBase64String(
         RandomNumberGenerator.GetBytes(32));
@@ -56,6 +59,7 @@ public sealed class IdentityApiFactory(
                 ["Jwt:ExpirationMinutes"] = "30",
                 ["BootstrapAdmin:Enabled"] = (bootstrap is not null).ToString(),
                 ["OfacAdapter:BaseUrl"] = "http://127.0.0.1:1",
+                ["WorldBankAdapter:BaseUrl"] = "http://127.0.0.1:1/",
             };
 
             if (bootstrap is not null)
@@ -95,6 +99,15 @@ public sealed class IdentityApiFactory(
             {
                 services.RemoveAll<
                     EyRiskScreening.Application.Screening.IScreeningSourceAdapter>();
+            }
+            else if (!retainWorldBankAdapter)
+            {
+                services.RemoveAll<
+                    EyRiskScreening.Application.Screening.IScreeningSourceAdapter>();
+                services.AddSingleton<
+                    EyRiskScreening.Application.Screening.IScreeningSourceAdapter>(
+                    serviceProvider => serviceProvider
+                        .GetRequiredService<OfacScreeningSourceAdapter>());
             }
 
             configureTestServices?.Invoke(services);
