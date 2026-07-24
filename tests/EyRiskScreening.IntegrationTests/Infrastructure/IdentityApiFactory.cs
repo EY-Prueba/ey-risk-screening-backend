@@ -17,7 +17,8 @@ public sealed class IdentityApiFactory(
     BootstrapSettings? bootstrap = null,
     string[]? allowedOrigins = null,
     IReadOnlyDictionary<string, string?>? configurationOverrides = null,
-    Action<IServiceCollection>? configureTestServices = null) : WebApplicationFactory<Program>
+    Action<IServiceCollection>? configureTestServices = null,
+    bool retainProductScreeningAdapters = false) : WebApplicationFactory<Program>
 {
     private readonly string _signingKeyBase64 = Convert.ToBase64String(
         RandomNumberGenerator.GetBytes(32));
@@ -54,6 +55,7 @@ public sealed class IdentityApiFactory(
                 ["Jwt:SigningKeyBase64"] = _signingKeyBase64,
                 ["Jwt:ExpirationMinutes"] = "30",
                 ["BootstrapAdmin:Enabled"] = (bootstrap is not null).ToString(),
+                ["OfacAdapter:BaseUrl"] = "http://127.0.0.1:1",
             };
 
             if (bootstrap is not null)
@@ -89,6 +91,12 @@ public sealed class IdentityApiFactory(
             services
                 .AddControllers()
                 .AddApplicationPart(typeof(AuthorizationProbeController).Assembly);
+            if (!retainProductScreeningAdapters)
+            {
+                services.RemoveAll<
+                    EyRiskScreening.Application.Screening.IScreeningSourceAdapter>();
+            }
+
             configureTestServices?.Invoke(services);
         });
     }

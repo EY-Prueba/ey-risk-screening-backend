@@ -302,6 +302,90 @@ public sealed class ScreeningOrchestratorTests
     }
 
     [Fact]
+    public async Task BestAliasProducesOneHitForTheCandidateUid()
+    {
+        var candidate = new ScreeningSourceCandidate(
+            "ofac-1001",
+            "Unrelated Primary Name",
+            [new ScreeningSourceField("List", "SDN")],
+            [
+                new ScreeningSourceAlternativeName(
+                    "Acme Corporation",
+                    [
+                        new ScreeningSourceField("AliasType", "a.k.a."),
+                        new ScreeningSourceField("AliasQuality", "strong"),
+                    ]),
+                new ScreeningSourceAlternativeName("Acme Corp", []),
+            ]);
+        var orchestrator = CreateOrchestrator(
+            [CreateAdapter(ScreeningSource.Ofac, [candidate])]);
+
+        var execution = await orchestrator.ExecuteAsync(
+            new ScreeningRequest("Acme Corporation", [ScreeningSource.Ofac]),
+            TestContext.Current.CancellationToken);
+
+        var source = Assert.Single(Assert.IsType<ScreeningRunResult>(execution.Run).Sources);
+        var match = Assert.Single(source.Matches);
+        Assert.Equal(1, source.Hits);
+        Assert.Equal("ofac-1001", match.ReferenceId);
+        Assert.Equal("Acme Corporation", match.Name);
+        Assert.True(match.Score.IsExactMatch);
+        Assert.Contains(
+            match.Fields,
+            field => field.Name == "AliasType" && field.Value == "a.k.a.");
+    }
+
+    [Fact]
+    public async Task CancellationIsCheckedWhileTraversingLargeAliasSets()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var alternativeNames = new CancellingAlternativeNames(
+            cancellation,
+            cancelAtIndex: 25,
+            count: 500);
+        var candidate = new ScreeningSourceCandidate(
+            "ofac-1001",
+            "Unrelated Primary Name",
+            [],
+            alternativeNames);
+        var orchestrator = CreateOrchestrator(
+            [CreateAdapter(ScreeningSource.Ofac, [candidate])]);
+
+        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            orchestrator.ExecuteAsync(
+                new ScreeningRequest("Acme Corporation", [ScreeningSource.Ofac]),
+                cancellation.Token));
+
+        Assert.InRange(alternativeNames.EnumeratedCount, 25, 26);
+    }
+
+    [Theory]
+    [InlineData(true, ScreeningSourceStatus.TimedOut)]
+    [InlineData(false, ScreeningSourceStatus.Unavailable)]
+    public async Task ExpectedAdapterFailuresMapToTypedSourceStatuses(
+        bool timedOut,
+        ScreeningSourceStatus expectedStatus)
+    {
+        Exception exception = timedOut
+            ? new ScreeningSourceTimedOutException("private timeout")
+            : new ScreeningSourceUnavailableException("private unavailable");
+        var adapter = new FakeScreeningSourceAdapter(
+            ScreeningSource.Ofac,
+            (_, _) => Task.FromException<IReadOnlyList<ScreeningSourceCandidate>>(
+                exception));
+        var reporter = new FakeScreeningFailureReporter();
+        var orchestrator = CreateOrchestrator([adapter], reporter);
+
+        var execution = await orchestrator.ExecuteAsync(
+            new ScreeningRequest("Acme Corporation", [ScreeningSource.Ofac]),
+            TestContext.Current.CancellationToken);
+
+        var source = Assert.Single(Assert.IsType<ScreeningRunResult>(execution.Run).Sources);
+        Assert.Equal(expectedStatus, source.Status);
+        Assert.Null(reporter.Exception);
+    }
+
+    [Fact]
     public async Task InvalidRequestDoesNotInvokeAdapters()
     {
         var adapter = CreateAdapter(ScreeningSource.Ofac, []);
@@ -355,4 +439,34 @@ public sealed class ScreeningOrchestratorTests
                     ResultLimit = resultLimit,
                 }),
         };
+
+    private sealed class CancellingAlternativeNames(
+        CancellationTokenSource cancellation,
+        int cancelAtIndex,
+        int count) : IReadOnlyList<ScreeningSourceAlternativeName>
+    {
+        public int Count => count;
+
+        public int EnumeratedCount { get; private set; }
+
+        public ScreeningSourceAlternativeName this[int index] =>
+            new($"Alias {index}", []);
+
+        public IEnumerator<ScreeningSourceAlternativeName> GetEnumerator()
+        {
+            for (var index = 0; index < count; index++)
+            {
+                EnumeratedCount++;
+                if (index == cancelAtIndex)
+                {
+                    cancellation.Cancel();
+                }
+
+                yield return this[index];
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() =>
+            GetEnumerator();
+    }
 }

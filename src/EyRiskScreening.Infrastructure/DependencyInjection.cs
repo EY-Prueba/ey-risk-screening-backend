@@ -7,6 +7,7 @@ using EyRiskScreening.Infrastructure.Identity;
 using EyRiskScreening.Infrastructure.Persistence;
 using EyRiskScreening.Infrastructure.Persistence.Screening;
 using EyRiskScreening.Infrastructure.Screening;
+using EyRiskScreening.Infrastructure.Screening.Ofac;
 using EyRiskScreening.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -47,6 +48,39 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(BootstrapAdminOptions.SectionName))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<BootstrapAdminOptions>, BootstrapAdminOptionsValidator>();
+
+        services
+            .AddOptions<OfacAdapterOptions>()
+            .Bind(configuration.GetSection(OfacAdapterOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<
+            IValidateOptions<OfacAdapterOptions>,
+            OfacAdapterOptionsValidator>();
+        services
+            .AddHttpClient(
+                OfacClient.ClientName,
+                (serviceProvider, client) =>
+                {
+                    var options = serviceProvider
+                        .GetRequiredService<IOptions<OfacAdapterOptions>>()
+                        .Value;
+                    client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+                    client.Timeout = Timeout.InfiniteTimeSpan;
+                })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                AutomaticDecompression = System.Net.DecompressionMethods.All,
+                UseCookies = false,
+            });
+        services.AddSingleton<OfacXmlParser>();
+        services.AddSingleton<OfacRedirectPolicy>();
+        services.AddSingleton<OfacBoundedFieldProjector>();
+        services.AddSingleton<IOfacClient, OfacClient>();
+        services.AddSingleton<OfacDatasetProvider>();
+        services.AddSingleton<OfacScreeningSourceAdapter>();
+        services.AddSingleton<IScreeningSourceAdapter>(serviceProvider =>
+            serviceProvider.GetRequiredService<OfacScreeningSourceAdapter>());
 
         services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =>
         {

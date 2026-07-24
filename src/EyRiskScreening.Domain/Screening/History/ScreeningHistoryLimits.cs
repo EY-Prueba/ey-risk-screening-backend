@@ -27,7 +27,7 @@ public static class ScreeningHistoryLimits
         ErrorMessageRunes * Utf16CodeUnitsPerRune;
 }
 
-internal static class ScreeningHistoryGuard
+public static class ScreeningHistoryGuard
 {
     public static void RequiredText(string value, int maximumRunes, string parameterName)
     {

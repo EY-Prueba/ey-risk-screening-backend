@@ -153,7 +153,8 @@ public sealed class ScreeningOrchestrator
                 candidates,
                 normalizedQuery,
                 sourceOptions,
-                startedAt);
+                startedAt,
+                linkedCancellation.Token);
         }
         catch (OperationCanceledException) when (requestCancellationToken.IsCancellationRequested)
         {
@@ -179,6 +180,26 @@ public sealed class ScreeningOrchestrator
                 SourceTimedOutMessage,
                 startedAt);
         }
+        catch (ScreeningSourceTimedOutException)
+        {
+            return CreateErrorResult(
+                source,
+                sourceOptions.MatchThreshold,
+                ScreeningSourceStatus.TimedOut,
+                ScreeningSourceErrorCode.SourceTimedOut,
+                SourceTimedOutMessage,
+                startedAt);
+        }
+        catch (ScreeningSourceUnavailableException)
+        {
+            return CreateErrorResult(
+                source,
+                sourceOptions.MatchThreshold,
+                ScreeningSourceStatus.Unavailable,
+                ScreeningSourceErrorCode.SourceUnavailable,
+                SourceUnavailableMessage,
+                startedAt);
+        }
         catch (Exception exception)
         {
             _failureReporter.ReportAdapterFailure(runId, source, exception);
@@ -197,38 +218,75 @@ public sealed class ScreeningOrchestrator
         IReadOnlyList<ScreeningSourceCandidate> candidates,
         NormalizedName normalizedQuery,
         ScreeningSourceOptions sourceOptions,
-        long startedAt)
+        long startedAt,
+        CancellationToken cancellationToken)
     {
-        var hits = candidates
-            .Select(candidate =>
+        cancellationToken.ThrowIfCancellationRequested();
+        var hits = new List<ScreeningMatchResult>();
+
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var bestMatch = CreateMatch(
+                candidate.ReferenceId,
+                candidate.Name,
+                candidate.Fields,
+                normalizedQuery);
+
+            foreach (var alternativeName in candidate.AlternativeNames)
             {
-                var normalizedCandidate = EntityNameNormalizer.Normalize(candidate.Name);
-                return new ScreeningMatchResult(
+                cancellationToken.ThrowIfCancellationRequested();
+                var alternativeMatch = CreateMatch(
                     candidate.ReferenceId,
-                    candidate.Name,
-                    normalizedCandidate.Value,
-                    NameMatchScorer.Score(normalizedQuery, normalizedCandidate),
-                    candidate.Fields
-                        .OrderBy(field => field.Name, StringComparer.Ordinal)
-                        .ThenBy(field => field.Value, StringComparer.Ordinal)
-                        .ToArray());
-            })
-            .Where(match => match.Score.OverallScore >= sourceOptions.MatchThreshold)
+                    alternativeName.Name,
+                    candidate.Fields.Concat(alternativeName.Fields),
+                    normalizedQuery);
+                if (alternativeMatch.Score.OverallScore > bestMatch.Score.OverallScore)
+                {
+                    bestMatch = alternativeMatch;
+                }
+            }
+
+            if (bestMatch.Score.OverallScore >= sourceOptions.MatchThreshold)
+            {
+                hits.Add(bestMatch);
+            }
+        }
+
+        var orderedHits = hits
             .OrderByDescending(match => match.Score.OverallScore)
             .ThenBy(match => match.NormalizedName, StringComparer.Ordinal)
             .ThenBy(match => match.ReferenceId, StringComparer.Ordinal)
             .ToArray();
-        var returnedMatches = hits.Take(sourceOptions.ResultLimit).ToArray();
+        var returnedMatches = orderedHits.Take(sourceOptions.ResultLimit).ToArray();
 
         return new ScreeningSourceResult(
             source,
             ScreeningSourceStatus.Succeeded,
             sourceOptions.MatchThreshold,
-            hits.Length,
+            orderedHits.Length,
             returnedMatches.Length,
             _timeProvider.GetElapsedTime(startedAt),
             null,
             returnedMatches);
+    }
+
+    private static ScreeningMatchResult CreateMatch(
+        string referenceId,
+        string name,
+        IEnumerable<ScreeningSourceField> fields,
+        NormalizedName normalizedQuery)
+    {
+        var normalizedCandidate = EntityNameNormalizer.Normalize(name);
+        return new ScreeningMatchResult(
+            referenceId,
+            name,
+            normalizedCandidate.Value,
+            NameMatchScorer.Score(normalizedQuery, normalizedCandidate),
+            fields
+                .OrderBy(field => field.Name, StringComparer.Ordinal)
+                .ThenBy(field => field.Value, StringComparer.Ordinal)
+                .ToArray());
     }
 
     private ScreeningSourceResult CreateErrorResult(
