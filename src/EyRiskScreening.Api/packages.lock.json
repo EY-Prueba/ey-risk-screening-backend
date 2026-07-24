@@ -272,6 +272,11 @@
         "resolved": "6.0.0",
         "contentHash": "CPc6tWO1LAer3IzfZufDBRL+UZQcj5uS207NHALQzP84Vp/z6wF0Aa0YZImOQY8iStY0A2zI/e3ihKNPfUm8XA=="
       },
+      "System.ComponentModel.Annotations": {
+        "type": "Transitive",
+        "resolved": "5.0.0",
+        "contentHash": "dMkqfy2el8A8/I76n2Hi1oBFEbG1SfxD2l5nhwXV3XjlnOmwxJlQbYpJH4W51odnU9sARCSAgv7S3CyAFMkpYg=="
+      },
       "System.Composition": {
         "type": "Transitive",
         "resolved": "9.0.0",
@@ -360,6 +365,7 @@
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.10, )",
           "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.10, )",
           "Microsoft.EntityFrameworkCore.SqlServer": "[10.0.10, )",
+          "Microsoft.Playwright": "[1.61.0, )",
           "System.IdentityModel.Tokens.Jwt": "[8.19.2, )"
         }
       },
@@ -389,6 +395,16 @@
         "dependencies": {
           "Microsoft.Data.SqlClient": "6.1.1",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.10"
+        }
+      },
+      "Microsoft.Playwright": {
+        "type": "CentralTransitive",
+        "requested": "[1.61.0, )",
+        "resolved": "1.61.0",
+        "contentHash": "VM149rQ2Pu+3xAzrO2gvh2WRgrWNbIl0jL9LG2oMC9xKUVYDnUrsh+E/5S+NQToVV4S+yhZ3NHsa6kf1PdHeag==",
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "6.0.0",
+          "System.ComponentModel.Annotations": "5.0.0"
         }
       },
       "System.IdentityModel.Tokens.Jwt": {

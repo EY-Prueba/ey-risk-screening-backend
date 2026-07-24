@@ -36,6 +36,11 @@ public sealed class OfacServiceLifetimeTests
                     {
                         TimeoutSeconds = 35,
                     },
+                [EyRiskScreening.Domain.Screening.ScreeningSource.WorldBank] =
+                    new ScreeningSourceOptions
+                    {
+                        TimeoutSeconds = 30,
+                    },
             },
         });
         builder.Services.RemoveAll<IOfacClient>();
@@ -65,7 +70,10 @@ public sealed class OfacServiceLifetimeTests
         var secondAdapter = secondScope.ServiceProvider
             .GetRequiredService<OfacScreeningSourceAdapter>();
         var registeredAdapter = Assert.Single(
-            firstScope.ServiceProvider.GetServices<IScreeningSourceAdapter>());
+            firstScope.ServiceProvider
+                .GetServices<IScreeningSourceAdapter>(),
+            adapter => adapter.Source
+                == EyRiskScreening.Domain.Screening.ScreeningSource.Ofac);
 
         Assert.Same(firstProvider, secondProvider);
         Assert.Same(firstParser, secondParser);
@@ -106,6 +114,16 @@ public sealed class OfacServiceLifetimeTests
             ["OfacAdapter:MaxNamesPerCandidate"] = "10",
             ["OfacAdapter:IncludeWeakAliases"] = "false",
             ["OfacAdapter:UserAgent"] = "EY-Risk-Screening-Tests/1.0",
+            ["WorldBankAdapter:BaseUrl"] = "http://127.0.0.1:12345/",
+            ["WorldBankAdapter:SnapshotTtlMinutes"] = "180",
+            ["WorldBankAdapter:MaxRows"] = "10000",
+            ["WorldBankAdapter:MaxRequestsPerRefresh"] = "64",
+            ["WorldBankAdapter:MaxRenderedContentBytes"] = "8388608",
+            ["WorldBankAdapter:BrowserHeadless"] = "true",
+            ["WorldBankAdapter:TableSelector"] = "#k-debarred-firms",
+            ["WorldBankAdapter:RowSelector"] =
+                "#k-debarred-firms .k-grid-content tbody tr",
+            ["WorldBankAdapter:UserAgent"] = "EY-Risk-Screening-Tests/1.0",
         };
 
     private sealed class FixedOfacClient : IOfacClient
