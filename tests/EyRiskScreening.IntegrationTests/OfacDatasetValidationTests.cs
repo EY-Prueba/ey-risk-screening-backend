@@ -40,6 +40,12 @@ public sealed class OfacDatasetValidationTests
     }
 
     [Fact]
+    public async Task UnsearchableNameKeepsOfacSpecificFailure()
+    {
+        await AssertInvalidRecordAsync(CreateRecord(primaryName: "---"));
+    }
+
+    [Fact]
     public async Task AliasPastHistoryLimitFailsBeforeCandidateIsReturned()
     {
         var alias = new OfacAlias(

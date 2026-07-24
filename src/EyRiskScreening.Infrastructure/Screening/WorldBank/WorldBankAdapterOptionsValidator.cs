@@ -62,6 +62,12 @@ internal sealed class WorldBankAdapterOptionsValidator(IHostEnvironment environm
                 "WorldBankAdapter:MaxRenderedContentBytes must be between 65536 and 16777216.");
         }
 
+        if (options.CleanupTimeoutSeconds is < 1 or > 15)
+        {
+            failures.Add(
+                "WorldBankAdapter:CleanupTimeoutSeconds must be between 1 and 15.");
+        }
+
         if (!environment.IsEnvironment("Testing") && !options.BrowserHeadless)
         {
             failures.Add(

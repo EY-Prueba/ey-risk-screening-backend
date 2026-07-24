@@ -16,6 +16,8 @@ internal sealed class WorldBankAdapterOptions
 
     public long MaxRenderedContentBytes { get; init; }
 
+    public int CleanupTimeoutSeconds { get; init; }
+
     public bool BrowserHeadless { get; init; }
 
     public string TableSelector { get; init; } = string.Empty;

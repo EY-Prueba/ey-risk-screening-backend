@@ -1,7 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
-using System.Text;
-using System.Text.Json;
 using EyRiskScreening.Application.Screening;
 using EyRiskScreening.Domain.Screening;
 using EyRiskScreening.Domain.Screening.History;
@@ -19,8 +17,6 @@ internal sealed partial class OffshoreLeaksScreeningSourceAdapter(
     ILogger<OffshoreLeaksScreeningSourceAdapter> logger)
     : IScreeningSourceAdapter
 {
-    private static readonly JsonSerializerOptions JsonOptions =
-        new(JsonSerializerDefaults.Web);
     private readonly OffshoreLeaksAdapterOptions _options = optionsAccessor.Value;
 
     public ScreeningSource Source => ScreeningSource.OffshoreLeaks;
@@ -222,39 +218,10 @@ internal sealed partial class OffshoreLeaksScreeningSourceAdapter(
     {
         try
         {
-            ScreeningHistoryGuard.RequiredText(
+            ScreeningSourceCandidatePersistenceGuard.ValidateMatch(
                 $"icij:{nodeId.ToString(CultureInfo.InvariantCulture)}",
-                ScreeningHistoryLimits.ReferenceIdRunes,
-                "referenceId");
-            ScreeningHistoryGuard.RequiredText(
                 name,
-                ScreeningHistoryLimits.MatchNameRunes,
-                nameof(name));
-            if (fields.Count > ScreeningHistoryLimits.MaximumFieldsPerMatch)
-            {
-                throw new ScreeningHistoryValidationException(
-                    "An Offshore Leaks match contains too many fields.");
-            }
-
-            foreach (var field in fields)
-            {
-                ScreeningHistoryGuard.RequiredText(
-                    field.Name,
-                    ScreeningHistoryLimits.FieldNameRunes,
-                    nameof(field.Name));
-                ScreeningHistoryGuard.RequiredText(
-                    field.Value,
-                    ScreeningHistoryLimits.FieldValueRunes,
-                    nameof(field.Value));
-            }
-
-            if (Encoding.Unicode.GetByteCount(
-                    JsonSerializer.Serialize(fields, JsonOptions))
-                > ScreeningHistoryLimits.MaximumFieldsJsonBytes)
-            {
-                throw new ScreeningHistoryValidationException(
-                    "Serialized Offshore Leaks fields exceed the persistence limit.");
-            }
+                fields);
         }
         catch (ScreeningHistoryValidationException exception)
         {

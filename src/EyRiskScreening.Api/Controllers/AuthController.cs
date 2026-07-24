@@ -1,7 +1,9 @@
 using EyRiskScreening.Api.Contracts.Authentication;
+using EyRiskScreening.Api.RateLimiting;
 using EyRiskScreening.Application.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace EyRiskScreening.Api.Controllers;
 
@@ -10,6 +12,7 @@ namespace EyRiskScreening.Api.Controllers;
 public sealed class AuthController(LoginService loginService) : ControllerBase
 {
     [AllowAnonymous]
+    [EnableRateLimiting(ScreeningRateLimitPolicyNames.Login)]
     [HttpPost("login")]
     [ProducesResponseType<LoginResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

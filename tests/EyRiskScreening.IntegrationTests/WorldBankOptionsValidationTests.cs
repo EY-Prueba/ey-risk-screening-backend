@@ -137,11 +137,37 @@ public sealed class WorldBankOptionsValidationTests
             MaxRows = rows,
             MaxRequestsPerRefresh = requests,
             MaxRenderedContentBytes = bytes,
+            CleanupTimeoutSeconds = current.CleanupTimeoutSeconds,
             BrowserHeadless = current.BrowserHeadless,
             TableSelector = current.TableSelector,
             RowSelector = current.RowSelector,
             UserAgent = current.UserAgent,
         };
+
+        Assert.True(validator.Validate(null, options).Failed);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(16)]
+    public void CleanupTimeoutIsBounded(int cleanupTimeoutSeconds)
+    {
+        var current = ProductOptions();
+        var options = new WorldBankAdapterOptions
+        {
+            BaseUrl = current.BaseUrl,
+            SnapshotTtlMinutes = current.SnapshotTtlMinutes,
+            MaxRows = current.MaxRows,
+            MaxRequestsPerRefresh = current.MaxRequestsPerRefresh,
+            MaxRenderedContentBytes = current.MaxRenderedContentBytes,
+            CleanupTimeoutSeconds = cleanupTimeoutSeconds,
+            BrowserHeadless = current.BrowserHeadless,
+            TableSelector = current.TableSelector,
+            RowSelector = current.RowSelector,
+            UserAgent = current.UserAgent,
+        };
+        var validator = new WorldBankAdapterOptionsValidator(
+            new EnvironmentStub(Environments.Production));
 
         Assert.True(validator.Validate(null, options).Failed);
     }
@@ -169,6 +195,7 @@ public sealed class WorldBankOptionsValidationTests
         Assert.Equal(10000, adapter.MaxRows);
         Assert.Equal(64, adapter.MaxRequestsPerRefresh);
         Assert.Equal(8388608, adapter.MaxRenderedContentBytes);
+        Assert.Equal(5, adapter.CleanupTimeoutSeconds);
         Assert.True(adapter.BrowserHeadless);
         Assert.Equal(
             WorldBankAdapterOptions.OfficialBaseUrl,
@@ -185,6 +212,7 @@ public sealed class WorldBankOptionsValidationTests
             MaxRows = 10000,
             MaxRequestsPerRefresh = 64,
             MaxRenderedContentBytes = 8388608,
+            CleanupTimeoutSeconds = 5,
             BrowserHeadless = true,
             TableSelector = "#k-debarred-firms",
             RowSelector = "#k-debarred-firms .k-grid-content tbody tr",

@@ -77,6 +77,7 @@ app.UseStatusCodePages(async statusCodeContext =>
     });
 });
 
+app.UseRouting();
 app.UseCors(corsPolicyName);
 app.UseAuthentication();
 app.UseAuthorization();

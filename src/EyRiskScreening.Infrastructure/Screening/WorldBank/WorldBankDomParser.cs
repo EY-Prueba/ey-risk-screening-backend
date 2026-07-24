@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using EyRiskScreening.Application.Screening;
 using EyRiskScreening.Domain.Screening;
 using EyRiskScreening.Domain.Screening.History;
@@ -103,8 +102,6 @@ internal sealed class WorldBankDomParser(
                 false),
         ],
     ];
-    private static readonly JsonSerializerOptions JsonOptions =
-        new(JsonSerializerDefaults.Web);
     private readonly WorldBankAdapterOptions _options = optionsAccessor.Value;
 
     public IReadOnlyList<WorldBankRecord> Parse(
@@ -478,44 +475,10 @@ internal sealed class WorldBankDomParser(
     {
         try
         {
-            ScreeningHistoryGuard.RequiredText(
+            ScreeningSourceCandidatePersistenceGuard.ValidateMatch(
                 referenceId,
-                ScreeningHistoryLimits.ReferenceIdRunes,
-                nameof(referenceId));
-            ScreeningHistoryGuard.RequiredText(
                 name,
-                ScreeningHistoryLimits.MatchNameRunes,
-                nameof(name));
-            ScreeningHistoryGuard.RequiredText(
-                EntityNameNormalizer.Normalize(name).Value,
-                ScreeningHistoryLimits.MatchNameRunes,
-                "normalizedName");
-
-            if (fields.Count > ScreeningHistoryLimits.MaximumFieldsPerMatch)
-            {
-                throw new ScreeningHistoryValidationException(
-                    "A World Bank match contains too many fields.");
-            }
-
-            foreach (var field in fields)
-            {
-                ScreeningHistoryGuard.RequiredText(
-                    field.Name,
-                    ScreeningHistoryLimits.FieldNameRunes,
-                    nameof(field.Name));
-                ScreeningHistoryGuard.RequiredText(
-                    field.Value,
-                    ScreeningHistoryLimits.FieldValueRunes,
-                    nameof(field.Value));
-            }
-
-            var json = JsonSerializer.Serialize(fields, JsonOptions);
-            if (Encoding.Unicode.GetByteCount(json)
-                > ScreeningHistoryLimits.MaximumFieldsJsonBytes)
-            {
-                throw new ScreeningHistoryValidationException(
-                    "Serialized World Bank fields exceed the persistence limit.");
-            }
+                fields);
         }
         catch (ScreeningHistoryValidationException exception)
         {

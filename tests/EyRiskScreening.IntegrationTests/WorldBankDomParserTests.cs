@@ -34,6 +34,21 @@ public sealed class WorldBankDomParserTests
         Assert.Equal(RetrievedAt.ToString("O"), Field(candidate, "DataRetrievedAtUtc"));
     }
 
+    [Fact]
+    public void UnsearchableNameKeepsWorldBankSpecificFailure()
+    {
+        var record = Assert.Single(WorldBankTestData.Parser().Parse(
+            WorldBankTestData.Table(
+                WorldBankTestData.ValidRow(firmName: "---")),
+            TestContext.Current.CancellationToken));
+
+        Assert.Throws<WorldBankAdapterException>(() =>
+            WorldBankDomParser.CreateCandidates(
+                [record],
+                RetrievedAt,
+                TestContext.Current.CancellationToken));
+    }
+
     [Theory]
     [InlineData("23-Jul-2026", 0)]
     [InlineData("Ongoing", 1)]
@@ -464,6 +479,7 @@ public sealed class WorldBankDomParserTests
             MaxRows = 1,
             MaxRequestsPerRefresh = options.MaxRequestsPerRefresh,
             MaxRenderedContentBytes = 65536,
+            CleanupTimeoutSeconds = options.CleanupTimeoutSeconds,
             BrowserHeadless = options.BrowserHeadless,
             TableSelector = options.TableSelector,
             RowSelector = options.RowSelector,
