@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json.Serialization;
+using EyRiskScreening.Api.Configuration;
+using EyRiskScreening.Api.Diagnostics;
+using EyRiskScreening.Api.Health;
 using EyRiskScreening.Api.OpenApi;
 using EyRiskScreening.Api.Screening;
 using EyRiskScreening.Application;
@@ -7,10 +10,25 @@ using EyRiskScreening.Application.Authentication;
 using EyRiskScreening.Application.Suppliers;
 using EyRiskScreening.Infrastructure;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 const string corsPolicyName = "ConfiguredOrigins";
+
+if (args is ["--playwright-install", .. var playwrightArguments])
+{
+    Environment.ExitCode = PlaywrightInstaller.Run(playwrightArguments);
+    return;
+}
+
+if (args.Contains("--playwright-smoke", StringComparer.Ordinal))
+{
+    await PlaywrightSmoke.RunAsync();
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +40,15 @@ builder.Services.AddScoped<SupplierService>();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScreeningCore(builder.Configuration);
 builder.Services.AddOpenApiDocumentation();
+builder.Services.AddConfiguredCors(builder.Configuration, corsPolicyName);
+builder.Services.AddConfiguredForwardedHeaders(builder.Configuration);
+builder.Services
+    .AddHealthChecks()
+    .AddCheck<SqlServerReadinessHealthCheck>(
+        "sql-server",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: ["ready"],
+        timeout: TimeSpan.FromSeconds(5));
 
 builder.Services.AddProblemDetails(options =>
 {
@@ -32,27 +59,6 @@ builder.Services.AddProblemDetails(options =>
     };
 });
 
-builder.Services.AddCors();
-builder.Services
-    .AddOptions<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>()
-    .Configure<IConfiguration>((options, configuration) =>
-{
-    var allowedOrigins = configuration
-        .GetSection("Cors:AllowedOrigins")
-        .Get<string[]>() ?? [];
-
-    options.AddPolicy(corsPolicyName, policy =>
-    {
-        if (allowedOrigins.Length > 0)
-        {
-            policy
-                .WithOrigins(allowedOrigins)
-                .AllowAnyHeader()
-                .AllowAnyMethod();
-        }
-    });
-});
-
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
@@ -60,6 +66,14 @@ builder.Services
             new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false)));
 
 var app = builder.Build();
+
+var forwardedHeaders = app.Services
+    .GetRequiredService<IOptions<ForwardedHeadersConfigurationOptions>>()
+    .Value;
+if (forwardedHeaders.Enabled)
+{
+    app.UseForwardedHeaders();
+}
 
 app.UseExceptionHandler();
 app.UseStatusCodePages(async statusCodeContext =>
@@ -91,6 +105,22 @@ app.UseRateLimiter();
 await app.Services.BootstrapIdentityAsync();
 
 app.MapControllers();
+app.MapHealthChecks(
+        "/health/live",
+        new HealthCheckOptions
+        {
+            Predicate = _ => false,
+            ResponseWriter = HealthResponseWriter.WriteAsync,
+        })
+    .AllowAnonymous();
+app.MapHealthChecks(
+        "/health/ready",
+        new HealthCheckOptions
+        {
+            Predicate = registration => registration.Tags.Contains("ready"),
+            ResponseWriter = HealthResponseWriter.WriteAsync,
+        })
+    .AllowAnonymous();
 
 app.Run();
 

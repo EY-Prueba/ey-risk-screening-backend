@@ -74,6 +74,17 @@ public static class OpenApiServiceCollectionExtensions
             return app;
         }
 
+        app.Use((context, next) =>
+        {
+            if (context.Request.Path.Equals(
+                    "/swagger",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                context.Request.Path = "/swagger/index.html";
+            }
+
+            return next(context);
+        });
         app.UseSwagger();
         app.UseSwaggerUI(options =>
         {
@@ -83,6 +94,7 @@ public static class OpenApiServiceCollectionExtensions
                 $"{OpenApiDocumentConstants.Title} {OpenApiDocumentConstants.Version}");
             options.DocumentTitle =
                 $"{OpenApiDocumentConstants.Title} — {OpenApiDocumentConstants.Version}";
+            options.HeadContent = """<base href="/swagger/" />""";
             options.DisplayRequestDuration();
         });
 
