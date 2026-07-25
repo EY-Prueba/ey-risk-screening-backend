@@ -1,69 +1,151 @@
-# EY Risk Screening Backend
+# EY Risk Screening
 
-Backend desarrollado en .NET 10 para una plataforma de búsqueda y cruce de entidades con listas internacionales de riesgo.
+Aplicación para consultar entidades en listas internacionales de riesgo mediante OFAC, World Bank y Offshore Leaks.
 
-## Requisitos
+La solución permite autenticarse, ejecutar búsquedas en una o varias fuentes y consultar el historial de resultados.
+
+## Aplicación desplegada
+
+- Frontend:
+- API: 
+- Swagger: 
+
+
+## Tecnologías principales
+
+- .NET 10
+- ASP.NET Core
+- SQL Server
+- Entity Framework Core
+- Playwright y Chromium
+- Swagger/OpenAPI
+- Docker Compose
+
+## Ejecución local
+
+### Requisitos
 
 - .NET SDK 10.0.300
 - Docker Desktop
-- Docker Compose
+- PowerShell 7
 
-## Estructura
+Para instalar PowerShell 7 como herramienta global:
 
-```text
-src/
-├── EyRiskScreening.Api
-├── EyRiskScreening.Application
-├── EyRiskScreening.Domain
-└── EyRiskScreening.Infrastructure
-
-tests/
-├── EyRiskScreening.UnitTests
-└── EyRiskScreening.IntegrationTests
+```powershell
+dotnet tool install --global PowerShell
 ```
 
-## Configuración local
+### 1. Configurar SQL Server
 
-Copia el archivo de ejemplo:
+Crea el archivo local de variables:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Configura una contraseña local para SQL Server dentro de `.env`:
-
-```env
-MSSQL_SA_PASSWORD=your_password
-```
-
-Luego inicia SQL Server:
+Configura `MSSQL_SA_PASSWORD` dentro de `.env` y levanta SQL Server:
 
 ```powershell
 docker compose up -d
-```
-
-Para verificar el estado del contenedor:
-
-```powershell
 docker compose ps
 ```
 
-Para detenerlo:
+Espera hasta que el contenedor aparezca como `healthy`.
+
+### 2. Configurar secretos locales
+
+Configura la conexión a SQL Server:
 
 ```powershell
-docker compose down
+dotnet user-secrets set `
+  "ConnectionStrings:DefaultConnection" `
+  "Server=localhost,1433;Database=EyRiskScreening;User Id=sa;Password=<PASSWORD_LOCAL>;Encrypt=True;TrustServerCertificate=True" `
+  --project .\src\EyRiskScreening.Api
 ```
 
-## Ejecutar el proyecto
+Genera una clave JWT local:
+
+```powershell
+$jwtKey = [Convert]::ToBase64String(
+  [Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+
+dotnet user-secrets set "Jwt:SigningKeyBase64" $jwtKey `
+  --project .\src\EyRiskScreening.Api
+
+Remove-Variable jwtKey
+```
+
+### 3. Restaurar y aplicar migraciones
+
+```powershell
+dotnet tool restore
+dotnet restore EyRiskScreening.slnx --locked-mode
+
+dotnet ef database update `
+  --project .\src\EyRiskScreening.Infrastructure `
+  --startup-project .\src\EyRiskScreening.Api
+```
+
+### 4. Instalar Chromium
+
+```powershell
+dotnet build `
+  .\src\EyRiskScreening.Infrastructure\EyRiskScreening.Infrastructure.csproj `
+  --configuration Release `
+  --no-restore `
+  -p:CopyLocalLockFileAssemblies=true
+
+pwsh `
+  .\src\EyRiskScreening.Infrastructure\bin\Release\net10.0\playwright.ps1 `
+  install chromium
+```
+
+### 5. Crear el primer administrador
+
+El bootstrap solo crea el primer usuario de una base vacía:
+
+```powershell
+dotnet user-secrets set "BootstrapAdmin:Enabled" "true" `
+  --project .\src\EyRiskScreening.Api
+
+dotnet user-secrets set "BootstrapAdmin:UserName" "<ADMIN_LOCAL>" `
+  --project .\src\EyRiskScreening.Api
+
+dotnet user-secrets set "BootstrapAdmin:Email" "<EMAIL_LOCAL>" `
+  --project .\src\EyRiskScreening.Api
+
+dotnet user-secrets set "BootstrapAdmin:Password" "<PASSWORD_LOCAL>" `
+  --project .\src\EyRiskScreening.Api
+```
+
+Después de crear el usuario, desactiva el bootstrap y elimina esos secretos.
+
+### 6. Ejecutar la API
+
+```powershell
+dotnet run `
+  --project .\src\EyRiskScreening.Api `
+  --launch-profile https
+```
+
+Swagger estará disponible en:
+
+```text
+http://localhost:5105
+```
+
+Desde Swagger:
+
+1. Ejecuta `POST /api/v1/auth/login`.
+2. Copia el valor `accessToken`.
+3. Pulsa **Authorize**.
+4. Pega únicamente el token.
+5. Ejecuta los endpoints protegidos.
+
+## Pruebas
 
 ```powershell
 dotnet restore EyRiskScreening.slnx --locked-mode
-dotnet build EyRiskScreening.slnx
-dotnet run --project src/EyRiskScreening.Api
-```
-
-## Ejecutar las pruebas
-
-```powershell
-dotnet test EyRiskScreening.slnx
+dotnet build EyRiskScreening.slnx --configuration Release --no-restore
+dotnet test EyRiskScreening.slnx --configuration Release --no-build --no-restore
 ```

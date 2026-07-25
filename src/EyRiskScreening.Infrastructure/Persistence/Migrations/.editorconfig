@@ -1,0 +1,5 @@
+[*.cs]
+# EF Core migration files are generated artifacts and must not be rewritten
+# for analyzer-only collection allocation recommendations.
+dotnet_diagnostic.CA1825.severity = none
+dotnet_diagnostic.CA1861.severity = none

@@ -9,11 +9,18 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Testcontainers.MsSql" />
     <PackageReference Include="xunit.v3" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\EyRiskScreening.Api\EyRiskScreening.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Fixtures\Ofac\*.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sdnList xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML">
+  <sdnEntry>
+    <uid>3002</uid>
+  </sdnEntry>
+</sdnList>
