@@ -28,13 +28,25 @@ public static class ScreeningServiceCollectionExtensions
             IValidateOptions<ScreeningRateLimitOptions>,
             ScreeningRateLimitOptionsValidator>();
 
+        services
+            .AddOptions<LoginRateLimitOptions>()
+            .Bind(configuration.GetSection(LoginRateLimitOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<
+            IValidateOptions<LoginRateLimitOptions>,
+            LoginRateLimitOptionsValidator>();
+
         services.AddScoped<ScreeningOrchestrator>();
         services.AddScoped<ExecuteScreeningService>();
         services.AddScoped<GetScreeningRunService>();
 
-        services.AddRateLimiter(options => options.AddPolicy<
-            string,
-            ScreeningRateLimitPolicy>(ScreeningRateLimitPolicyNames.Screening));
+        services.AddRateLimiter(options =>
+        {
+            options.AddPolicy<string, LoginRateLimitPolicy>(
+                ScreeningRateLimitPolicyNames.Login);
+            options.AddPolicy<string, ScreeningRateLimitPolicy>(
+                ScreeningRateLimitPolicyNames.Screening);
+        });
 
         return services;
     }

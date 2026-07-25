@@ -45,6 +45,7 @@ public sealed class OffshoreLeaksOptionsValidationTests
     }
 
     [Theory]
+    [InlineData("https://offshoreleaks.icij.org/")]
     [InlineData("https://example.test/")]
     [InlineData("http://user@127.0.0.1:12345/")]
     [InlineData("http://127.0.0.1:12345/path")]
@@ -58,6 +59,20 @@ public sealed class OffshoreLeaksOptionsValidationTests
         Assert.True(validator.Validate(
             null,
             ProductOptions(baseUrl)).Failed);
+    }
+
+    [Fact]
+    public void DevelopmentUsesTheStrictProductionOriginPolicy()
+    {
+        var validator = new OffshoreLeaksAdapterOptionsValidator(
+            new WorldBankTestHostEnvironment(Environments.Development));
+
+        Assert.True(validator.Validate(
+            null,
+            ProductOptions()).Succeeded);
+        Assert.True(validator.Validate(
+            null,
+            ProductOptions("http://127.0.0.1:12345/")).Failed);
     }
 
     [Theory]

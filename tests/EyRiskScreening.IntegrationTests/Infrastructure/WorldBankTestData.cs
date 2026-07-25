@@ -136,6 +136,7 @@ internal static class WorldBankTestData
             MaxRows = 10000,
             MaxRequestsPerRefresh = 64,
             MaxRenderedContentBytes = 8388608,
+            CleanupTimeoutSeconds = 5,
             BrowserHeadless = true,
             TableSelector = "#k-debarred-firms",
             RowSelector = "#k-debarred-firms .k-grid-content tbody tr",

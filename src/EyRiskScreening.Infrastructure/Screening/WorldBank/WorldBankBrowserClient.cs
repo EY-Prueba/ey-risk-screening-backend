@@ -13,6 +13,7 @@ namespace EyRiskScreening.Infrastructure.Screening.WorldBank;
 internal sealed partial class WorldBankBrowserClient(
     IOptions<WorldBankAdapterOptions> optionsAccessor,
     ScreeningOptions screeningOptions,
+    TimeProvider timeProvider,
     IHostEnvironment environment,
     ILogger<WorldBankBrowserClient> logger) : IWorldBankBrowserClient
 {
@@ -35,6 +36,10 @@ internal sealed partial class WorldBankBrowserClient(
     private readonly WorldBankAdapterOptions _options = optionsAccessor.Value;
     private readonly float _timeoutMilliseconds =
         screeningOptions.Sources[ScreeningSource.WorldBank].TimeoutSeconds * 1000F;
+    private readonly WorldBankCleanupCoordinator _cleanupCoordinator = new(
+        timeProvider,
+        TimeSpan.FromSeconds(optionsAccessor.Value.CleanupTimeoutSeconds),
+        logger);
 
     public async Task<WorldBankTableData> LoadTableAsync(
         CancellationToken cancellationToken)
@@ -48,14 +53,18 @@ internal sealed partial class WorldBankBrowserClient(
         var blockedByHost = 0;
         var requestCount = 0;
         var violations = new ConcurrentQueue<Exception>();
+        WorldBankTableData? result = null;
+        var cleanupSucceeded = true;
 
         try
         {
-            playwright = await Microsoft.Playwright.Playwright
-                .CreateAsync()
-                .WaitAsync(cancellationToken)
+            playwright = await AwaitResourceOperationAsync(
+                    Microsoft.Playwright.Playwright.CreateAsync(),
+                    value => Task.Run(value.Dispose, CancellationToken.None),
+                    cancellationToken)
                 .ConfigureAwait(false);
-            browser = await playwright.Chromium.LaunchAsync(
+            browser = await AwaitResourceOperationAsync(
+                    playwright.Chromium.LaunchAsync(
                     new BrowserTypeLaunchOptions
                     {
                         Headless = _options.BrowserHeadless,
@@ -66,10 +75,12 @@ internal sealed partial class WorldBankBrowserClient(
                             "--disable-extensions",
                             "--disable-sync",
                         ],
-                    })
-                .WaitAsync(cancellationToken)
+                    }),
+                    value => value.CloseAsync(),
+                    cancellationToken)
                 .ConfigureAwait(false);
-            context = await browser.NewContextAsync(
+            context = await AwaitResourceOperationAsync(
+                    browser.NewContextAsync(
                     new BrowserNewContextOptions
                     {
                         AcceptDownloads = false,
@@ -78,11 +89,14 @@ internal sealed partial class WorldBankBrowserClient(
                         ServiceWorkers = ServiceWorkerPolicy.Block,
                         UserAgent = _options.UserAgent,
                         Permissions = [],
-                    })
-                .WaitAsync(cancellationToken)
+                    }),
+                    value => value.CloseAsync(),
+                    cancellationToken)
                 .ConfigureAwait(false);
-            page = await context.NewPageAsync()
-                .WaitAsync(cancellationToken)
+            page = await AwaitResourceOperationAsync(
+                    context.NewPageAsync(),
+                    value => value.CloseAsync(),
+                    cancellationToken)
                 .ConfigureAwait(false);
             page.SetDefaultTimeout(_timeoutMilliseconds);
             page.SetDefaultNavigationTimeout(_timeoutMilliseconds);
@@ -94,7 +108,8 @@ internal sealed partial class WorldBankBrowserClient(
                         "The World Bank page opened an unexpected browser page."));
                 }
             };
-            await context.AddInitScriptAsync(
+            await AwaitPageOperationAsync(
+                    context.AddInitScriptAsync(
                     """
                     (() => {
                       const blockedConstructor = class {
@@ -127,11 +142,12 @@ internal sealed partial class WorldBankBrowserClient(
                         value: () => false
                       });
                     })();
-                    """)
-                .WaitAsync(cancellationToken)
+                    """),
+                    cancellationToken)
                 .ConfigureAwait(false);
 
-            await context.RouteAsync(
+            await AwaitPageOperationAsync(
+                    context.RouteAsync(
                 "**/*",
                 async route =>
                 {
@@ -159,8 +175,8 @@ internal sealed partial class WorldBankBrowserClient(
                     }
 
                     await route.ContinueAsync().ConfigureAwait(false);
-                })
-                .WaitAsync(cancellationToken)
+                }),
+                    cancellationToken)
                 .ConfigureAwait(false);
 
             var navigationTask = page.GotoAsync(
@@ -172,7 +188,6 @@ internal sealed partial class WorldBankBrowserClient(
                 });
             var response = await AwaitPageOperationAsync(
                     navigationTask,
-                    page,
                     cancellationToken)
                 .ConfigureAwait(false);
             ThrowViolation(violations);
@@ -181,7 +196,6 @@ internal sealed partial class WorldBankBrowserClient(
 
             var tableCount = await AwaitPageOperationAsync(
                     page.Locator(_options.TableSelector).CountAsync(),
-                    page,
                     cancellationToken)
                 .ConfigureAwait(false);
             if (tableCount != 1)
@@ -222,7 +236,6 @@ internal sealed partial class WorldBankBrowserClient(
                         {
                             Timeout = _timeoutMilliseconds,
                         }),
-                    page,
                     cancellationToken)
                 .ConfigureAwait(false);
             ThrowViolation(violations);
@@ -231,7 +244,6 @@ internal sealed partial class WorldBankBrowserClient(
             var rowLocator = page.Locator(_options.RowSelector);
             var rowCount = await AwaitPageOperationAsync(
                     rowLocator.CountAsync(),
-                    page,
                     cancellationToken)
                 .ConfigureAwait(false);
             if (rowCount > _options.MaxRows)
@@ -243,7 +255,6 @@ internal sealed partial class WorldBankBrowserClient(
             var renderedBytes = await AwaitPageOperationAsync(
                     page.Locator(_options.TableSelector).EvaluateAsync<long>(
                         "element => new TextEncoder().encode(element.innerText || '').length"),
-                    page,
                     cancellationToken)
                 .ConfigureAwait(false);
             if (renderedBytes > _options.MaxRenderedContentBytes)
@@ -254,7 +265,6 @@ internal sealed partial class WorldBankBrowserClient(
 
             var headerRows = await AwaitPageOperationAsync(
                     ExtractHeaderRowsAsync(page),
-                    page,
                     cancellationToken)
                 .ConfigureAwait(false);
             var rows = await AwaitPageOperationAsync(
@@ -263,13 +273,15 @@ internal sealed partial class WorldBankBrowserClient(
                         elements => elements.map(row =>
                           Array.from(row.children, cell => cell.textContent || ''))
                         """),
-                    page,
                     cancellationToken)
                 .ConfigureAwait(false);
             ThrowViolation(violations);
             ValidateActivePage(page);
             LogBlockedResources(logger, blockedByType, blockedByHost);
-            return WorldBankTableData.Create(headerRows, rows, renderedBytes);
+            result = WorldBankTableData.Create(
+                headerRows,
+                rows,
+                renderedBytes);
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
@@ -294,18 +306,24 @@ internal sealed partial class WorldBankBrowserClient(
         }
         finally
         {
-            if (context is not null)
-            {
-                await CloseContextAsync(context).ConfigureAwait(false);
-            }
-
-            if (browser is not null)
-            {
-                await CloseBrowserAsync(browser).ConfigureAwait(false);
-            }
-
-            DisposePlaywright(playwright);
+            cleanupSucceeded = await CleanupAsync(
+                    page,
+                    context,
+                    browser,
+                    playwright)
+                .ConfigureAwait(false);
         }
+
+        if (!cleanupSucceeded)
+        {
+            throw new ScreeningSourceUnavailableException(
+                "The World Bank browser resources could not be finalized.");
+        }
+
+        ThrowViolation(violations);
+        return result
+            ?? throw new InvalidOperationException(
+                "A completed World Bank browser load must contain table data.");
     }
 
     private bool IsAllowedRequestUri(string value)
@@ -533,9 +551,8 @@ internal sealed partial class WorldBankBrowserClient(
     private static WorldBankAdapterException InvalidHeaderMetadata() =>
         new("The rendered World Bank header metadata is invalid.");
 
-    private static async Task<T> AwaitPageOperationAsync<T>(
+    private async Task<T> AwaitPageOperationAsync<T>(
         Task<T> operation,
-        IPage page,
         CancellationToken cancellationToken)
     {
         try
@@ -547,15 +564,35 @@ internal sealed partial class WorldBankBrowserClient(
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
         {
-            await ClosePageAsync(page).ConfigureAwait(false);
-            await ObserveAsync(operation).ConfigureAwait(false);
+            _cleanupCoordinator.Track(operation, "browser-operation");
             throw;
         }
     }
 
-    private static async Task AwaitPageOperationAsync(
+    private async Task<T> AwaitResourceOperationAsync<T>(
+        Task<T> operation,
+        Func<T, Task> lateResultCleanup,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await operation
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            _cleanupCoordinator.Track(
+                operation,
+                "browser-resource-creation",
+                lateResultCleanup);
+            throw;
+        }
+    }
+
+    private async Task AwaitPageOperationAsync(
         Task operation,
-        IPage page,
         CancellationToken cancellationToken)
     {
         try
@@ -567,79 +604,61 @@ internal sealed partial class WorldBankBrowserClient(
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
         {
-            await ClosePageAsync(page).ConfigureAwait(false);
-            await ObserveAsync(operation).ConfigureAwait(false);
+            _cleanupCoordinator.Track(operation, "browser-operation");
             throw;
         }
     }
 
-    private static async Task ObserveAsync(Task operation)
+    private async Task<bool> CleanupAsync(
+        IPage? page,
+        IBrowserContext? context,
+        IBrowser? browser,
+        IPlaywright? playwright)
     {
-        try
+        var budget = _cleanupCoordinator.CreateBudget();
+        var succeeded = true;
+        if (page is not null)
         {
-            await operation.ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // The initiating cancellation is the public outcome.
-        }
-    }
-
-    private static async Task ClosePageAsync(IPage page)
-    {
-        try
-        {
-            await page.CloseAsync().ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // Cleanup must not replace the primary browser operation outcome.
-        }
-    }
-
-    private static async Task CloseContextAsync(IBrowserContext context)
-    {
-        try
-        {
-            await context.ClearCookiesAsync().ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // Cleanup must not replace the primary browser operation outcome.
+            succeeded &= await _cleanupCoordinator.RunAsync(
+                    () => page.CloseAsync(),
+                    "page-close",
+                    budget)
+                .ConfigureAwait(false);
         }
 
-        try
+        if (context is not null)
         {
-            await context.CloseAsync().ConfigureAwait(false);
+            succeeded &= await _cleanupCoordinator.RunAsync(
+                    () => context.ClearCookiesAsync(),
+                    "context-clear-cookies",
+                    budget)
+                .ConfigureAwait(false);
+            succeeded &= await _cleanupCoordinator.RunAsync(
+                    () => context.CloseAsync(),
+                    "context-close",
+                    budget)
+                .ConfigureAwait(false);
         }
-        catch (Exception)
-        {
-            // Cleanup must not replace the primary browser operation outcome.
-        }
-    }
 
-    private static async Task CloseBrowserAsync(IBrowser browser)
-    {
-        try
+        if (browser is not null)
         {
-            await browser.CloseAsync().ConfigureAwait(false);
+            succeeded &= await _cleanupCoordinator.RunAsync(
+                    () => browser.CloseAsync(),
+                    "browser-close",
+                    budget)
+                .ConfigureAwait(false);
         }
-        catch (Exception)
-        {
-            // Cleanup must not replace the primary browser operation outcome.
-        }
-    }
 
-    private static void DisposePlaywright(IPlaywright? playwright)
-    {
-        try
+        if (playwright is not null)
         {
-            playwright?.Dispose();
+            succeeded &= await _cleanupCoordinator.RunSynchronousAsync(
+                    playwright.Dispose,
+                    "playwright-dispose",
+                    budget)
+                .ConfigureAwait(false);
         }
-        catch (Exception)
-        {
-            // Cleanup must not replace the primary browser operation outcome.
-        }
+
+        return succeeded;
     }
 
     [LoggerMessage(

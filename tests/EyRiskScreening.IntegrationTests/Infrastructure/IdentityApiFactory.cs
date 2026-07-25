@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using EyRiskScreening.IntegrationTests.Controllers;
 using EyRiskScreening.Infrastructure.Screening.Ofac;
 using EyRiskScreening.Infrastructure.Screening.WorldBank;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -21,7 +22,8 @@ public sealed class IdentityApiFactory(
     IReadOnlyDictionary<string, string?>? configurationOverrides = null,
     Action<IServiceCollection>? configureTestServices = null,
     bool retainProductScreeningAdapters = false,
-    bool retainWorldBankAdapter = false) : WebApplicationFactory<Program>
+    bool retainWorldBankAdapter = false,
+    string environment = "Testing") : WebApplicationFactory<Program>
 {
     private readonly string _signingKeyBase64 = Convert.ToBase64String(
         RandomNumberGenerator.GetBytes(32));
@@ -47,7 +49,7 @@ public sealed class IdentityApiFactory(
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Testing");
+        builder.UseEnvironment(environment);
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
             var values = new Dictionary<string, string?>
@@ -58,10 +60,17 @@ public sealed class IdentityApiFactory(
                 ["Jwt:SigningKeyBase64"] = _signingKeyBase64,
                 ["Jwt:ExpirationMinutes"] = "30",
                 ["BootstrapAdmin:Enabled"] = (bootstrap is not null).ToString(),
-                ["OfacAdapter:BaseUrl"] = "http://127.0.0.1:1",
-                ["WorldBankAdapter:BaseUrl"] = "http://127.0.0.1:1/",
-                ["OffshoreLeaksAdapter:BaseUrl"] = "http://127.0.0.1:1/",
             };
+
+            if (string.Equals(
+                    environment,
+                    "Testing",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                values["OfacAdapter:BaseUrl"] = "http://127.0.0.1:1";
+                values["WorldBankAdapter:BaseUrl"] = "http://127.0.0.1:1/";
+                values["OffshoreLeaksAdapter:BaseUrl"] = "http://127.0.0.1:1/";
+            }
 
             if (bootstrap is not null)
             {
@@ -91,6 +100,8 @@ public sealed class IdentityApiFactory(
 
         builder.ConfigureServices(services =>
         {
+            services.AddDataProtection()
+                .UseEphemeralDataProtectionProvider();
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(timeProvider);
             services

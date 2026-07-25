@@ -195,7 +195,7 @@ public sealed class WorldBankBrowserClientTests
     [Fact]
     public async Task RequestLimitFailsClosed()
     {
-        await using var server = await CreateServerAsync();
+        await using var server = await CreateServerAsync(includeImage: false);
         var current = CreateOptions(
             new Uri(server.BaseAddress, "/page").ToString());
         var options = Clone(current, maxRequests: 1);
@@ -258,7 +258,8 @@ public sealed class WorldBankBrowserClientTests
             client.LoadTableAsync(TestContext.Current.CancellationToken));
     }
 
-    private static async Task<OfacTestServer> CreateServerAsync() =>
+    private static async Task<OfacTestServer> CreateServerAsync(
+        bool includeImage = true) =>
         await OfacTestServer.StartAsync(
             async context =>
             {
@@ -285,7 +286,7 @@ public sealed class WorldBankBrowserClientTests
                         context.Response.StatusCode = StatusCodes.Status204NoContent;
                         break;
                     default:
-                        await WritePageAsync(context);
+                        await WritePageAsync(context, includeImage: includeImage);
                         break;
                 }
             },
@@ -293,7 +294,8 @@ public sealed class WorldBankBrowserClientTests
 
     private static async Task WritePageAsync(
         HttpContext context,
-        bool setCookie = false)
+        bool setCookie = false,
+        bool includeImage = true)
     {
         if (setCookie)
         {
@@ -312,7 +314,7 @@ public sealed class WorldBankBrowserClientTests
               <section id="other-sanctions"><table><tbody>
                 <tr><td>Must be ignored</td></tr>
               </tbody></table></section>
-              <img src="/image.png">
+              {{(includeImage ? """<img src="/image.png">""" : string.Empty)}}
               <script>
                 fetch('/data').then(response => response.json()).then(data => {
                   const body = document.querySelector(
@@ -365,6 +367,7 @@ public sealed class WorldBankBrowserClientTests
         new(
             Options.Create(options),
             WorldBankTestData.ScreeningOptions(timeoutSeconds),
+            TimeProvider.System,
             new WorldBankTestHostEnvironment("Testing"),
             NullLogger<WorldBankBrowserClient>.Instance);
 
@@ -382,6 +385,7 @@ public sealed class WorldBankBrowserClientTests
             MaxRequestsPerRefresh =
                 maxRequests ?? options.MaxRequestsPerRefresh,
             MaxRenderedContentBytes = options.MaxRenderedContentBytes,
+            CleanupTimeoutSeconds = options.CleanupTimeoutSeconds,
             BrowserHeadless = options.BrowserHeadless,
             TableSelector = options.TableSelector,
             RowSelector = options.RowSelector,

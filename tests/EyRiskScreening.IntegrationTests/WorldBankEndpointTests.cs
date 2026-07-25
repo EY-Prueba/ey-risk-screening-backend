@@ -76,7 +76,9 @@ public sealed class WorldBankEndpointTests(SqlServerFixture sqlServer)
         Assert.Equal("01-Jan-2024", Field(match, "FromDate"));
         Assert.Equal("Ongoing", Field(match, "ToDate"));
         Assert.Equal("Procurement violation", Field(match, "Grounds"));
-        Assert.Equal("Synthetic Entity (*)", Field(match, "OriginalFirmName"));
+        Assert.Equal(
+            "Synthetic Entity(Reg. No: 45907) *696",
+            Field(match, "OriginalFirmName"));
         Assert.DoesNotContain(
             match.Attributes,
             field => field.Name.Contains("Html", StringComparison.OrdinalIgnoreCase)
@@ -157,7 +159,8 @@ public sealed class WorldBankEndpointTests(SqlServerFixture sqlServer)
                             rows = new[]
                             {
                                 WorldBankTestData.ValidRow(
-                                    firmName: "Synthetic Entity (*)"),
+                                    firmName:
+                                        "Synthetic Entity(Reg. No: 45907) *696"),
                             },
                         },
                         context.RequestAborted);

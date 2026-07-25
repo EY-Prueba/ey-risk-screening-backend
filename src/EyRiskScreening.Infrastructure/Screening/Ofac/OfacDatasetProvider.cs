@@ -1,7 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Runtime.ExceptionServices;
-using System.Text;
-using System.Text.Json;
 using EyRiskScreening.Application.Screening;
 using EyRiskScreening.Domain.Screening;
 using EyRiskScreening.Domain.Screening.History;
@@ -18,8 +16,6 @@ internal sealed class OfacDatasetProvider(
     OfacBoundedFieldProjector fieldProjector,
     IHostApplicationLifetime applicationLifetime) : IDisposable
 {
-    private static readonly JsonSerializerOptions JsonOptions =
-        new(JsonSerializerDefaults.Web);
     private readonly object _refreshSync = new();
     private readonly CancellationTokenSource _disposeCancellation = new();
     private readonly OfacAdapterOptions _options = optionsAccessor.Value;
@@ -595,46 +591,10 @@ internal sealed class OfacDatasetProvider(
     {
         try
         {
-            ScreeningHistoryGuard.RequiredText(
+            ScreeningSourceCandidatePersistenceGuard.ValidateMatch(
                 referenceId,
-                ScreeningHistoryLimits.ReferenceIdRunes,
-                nameof(referenceId));
-            ScreeningHistoryGuard.RequiredText(
                 name,
-                ScreeningHistoryLimits.MatchNameRunes,
-                nameof(name));
-            ScreeningHistoryGuard.RequiredText(
-                EntityNameNormalizer.Normalize(name).Value,
-                ScreeningHistoryLimits.MatchNameRunes,
-                "normalizedName");
-
-            if (fields.Count > ScreeningHistoryLimits.MaximumFieldsPerMatch)
-            {
-                throw new ScreeningHistoryValidationException(
-                    "An OFAC match contains too many fields.");
-            }
-
-            var storedFields = new List<StoredField>(fields.Count);
-            foreach (var field in fields)
-            {
-                ScreeningHistoryGuard.RequiredText(
-                    field.Name,
-                    ScreeningHistoryLimits.FieldNameRunes,
-                    nameof(field.Name));
-                ScreeningHistoryGuard.RequiredText(
-                    field.Value,
-                    ScreeningHistoryLimits.FieldValueRunes,
-                    nameof(field.Value));
-                storedFields.Add(new StoredField(field.Name, field.Value));
-            }
-
-            var json = JsonSerializer.Serialize(storedFields, JsonOptions);
-            if (Encoding.Unicode.GetByteCount(json)
-                > ScreeningHistoryLimits.MaximumFieldsJsonBytes)
-            {
-                throw new ScreeningHistoryValidationException(
-                    "Serialized OFAC match fields exceed the persistence limit.");
-            }
+                fields);
         }
         catch (ScreeningHistoryValidationException exception)
         {
@@ -663,8 +623,6 @@ internal sealed class OfacDatasetProvider(
                 exception);
         }
     }
-
-    private sealed record StoredField(string Name, string Value);
 
     private sealed record DownloadOutcome(
         IReadOnlyList<OfacRecord>? Records,

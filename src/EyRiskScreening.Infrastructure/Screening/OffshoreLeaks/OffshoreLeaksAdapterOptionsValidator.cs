@@ -118,10 +118,17 @@ internal sealed class OffshoreLeaksAdapterOptionsValidator(
             return;
         }
 
-        if (environment.IsEnvironment("Testing") && uri.IsLoopback)
+        if (environment.IsEnvironment("Testing"))
         {
-            if ((!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-                 && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            if (!uri.IsLoopback
+                || (!string.Equals(
+                        uri.Scheme,
+                        Uri.UriSchemeHttp,
+                        StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(
+                        uri.Scheme,
+                        Uri.UriSchemeHttps,
+                        StringComparison.OrdinalIgnoreCase))
                 || uri.AbsolutePath != "/")
             {
                 failures.Add(

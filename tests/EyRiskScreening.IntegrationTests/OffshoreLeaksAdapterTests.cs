@@ -79,6 +79,20 @@ public sealed class OffshoreLeaksAdapterTests
     }
 
     [Fact]
+    public async Task UnsearchableNameKeepsOffshoreLeaksSpecificFailure()
+    {
+        using var handler = CompleteHandler(101, "---");
+        using var lifetime = new TestHostApplicationLifetime();
+        var time = new MutableTimeProvider(InitialTime);
+        using var adapter = CreateAdapter(handler, time, lifetime);
+
+        await Assert.ThrowsAsync<OffshoreLeaksAdapterException>(() =>
+            adapter.Value.SearchAsync(
+                new ScreeningSourceQuery("Acme", "ACME"),
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task ExpiredQueryReusesFreshEntityCache()
     {
         using var handler = CompleteHandler(101, "Acme");
