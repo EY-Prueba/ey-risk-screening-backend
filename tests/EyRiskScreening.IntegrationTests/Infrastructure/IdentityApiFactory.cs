@@ -1,9 +1,11 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using EyRiskScreening.IntegrationTests.Controllers;
 using EyRiskScreening.Infrastructure.Screening.Ofac;
 using EyRiskScreening.Infrastructure.Screening.WorldBank;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -23,7 +25,8 @@ public sealed class IdentityApiFactory(
     Action<IServiceCollection>? configureTestServices = null,
     bool retainProductScreeningAdapters = false,
     bool retainWorldBankAdapter = false,
-    string environment = "Testing") : WebApplicationFactory<Program>
+    string environment = "Testing",
+    IPAddress? proxyRemoteIpAddress = null) : WebApplicationFactory<Program>
 {
     private readonly string _signingKeyBase64 = Convert.ToBase64String(
         RandomNumberGenerator.GetBytes(32));
@@ -102,6 +105,12 @@ public sealed class IdentityApiFactory(
         {
             services.AddDataProtection()
                 .UseEphemeralDataProtectionProvider();
+            if (proxyRemoteIpAddress is not null)
+            {
+                services.AddSingleton<IStartupFilter>(
+                    new RemoteIpStartupFilter(proxyRemoteIpAddress));
+            }
+
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(timeProvider);
             services
@@ -125,6 +134,22 @@ public sealed class IdentityApiFactory(
             configureTestServices?.Invoke(services);
         });
     }
+}
+
+internal sealed class RemoteIpStartupFilter(IPAddress remoteIpAddress)
+    : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(
+        Action<IApplicationBuilder> next) =>
+        app =>
+        {
+            app.Use(async (context, continuation) =>
+            {
+                context.Connection.RemoteIpAddress = remoteIpAddress;
+                await continuation();
+            });
+            next(app);
+        };
 }
 
 public sealed record BootstrapSettings(

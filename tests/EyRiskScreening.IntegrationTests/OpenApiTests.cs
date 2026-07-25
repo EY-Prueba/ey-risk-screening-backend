@@ -536,11 +536,15 @@ public sealed class OpenApiTests
         using var canonical = await client.GetAsync(
             "/swagger",
             TestContext.Current.CancellationToken);
-        Assert.True(
-            canonical.StatusCode is HttpStatusCode.MovedPermanently
-                or HttpStatusCode.Found
-                or HttpStatusCode.TemporaryRedirect
-                or HttpStatusCode.PermanentRedirect);
+        Assert.Equal(HttpStatusCode.OK, canonical.StatusCode);
+        Assert.Equal(
+            "text/html",
+            canonical.Content.Headers.ContentType?.MediaType);
+        Assert.Contains(
+            """<base href="/swagger/" />""",
+            await canonical.Content.ReadAsStringAsync(
+                TestContext.Current.CancellationToken),
+            StringComparison.Ordinal);
 
         using var ui = await client.GetAsync(
             "/swagger/index.html",
