@@ -68,9 +68,10 @@ public sealed class ScreeningHistoryMigrationTests(SqlServerFixture sqlServer)
             FROM [__EFMigrationsHistory]
             ORDER BY [MigrationId]
             """);
-        Assert.Equal(2, migrations.Count);
+        Assert.Equal(3, migrations.Count);
         Assert.Equal("20260722101752_InitialIdentity", migrations[0]);
         Assert.EndsWith("_AddScreeningHistory", migrations[1], StringComparison.Ordinal);
+        Assert.EndsWith("_AddSuppliers", migrations[2], StringComparison.Ordinal);
     }
 
     [Fact]

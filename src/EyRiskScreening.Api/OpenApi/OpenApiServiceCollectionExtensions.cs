@@ -51,10 +51,12 @@ public static class OpenApiServiceCollectionExtensions
                 && controllerAction.ControllerTypeInfo.Assembly
                     == typeof(AuthController).Assembly);
             options.TagActionsBy(apiDescription =>
-                apiDescription.ActionDescriptor.RouteValues["controller"]
-                    == "Auth"
-                    ? ["Authentication"]
-                    : ["Screenings"]);
+                apiDescription.ActionDescriptor.RouteValues["controller"] switch
+                {
+                    "Auth" => ["Authentication"],
+                    "Suppliers" => ["Suppliers"],
+                    _ => ["Screenings"],
+                });
             options.OperationFilter<OpenApiOperationFilter>();
             options.SchemaFilter<OpenApiSchemaFilter>();
             options.DocumentFilter<OpenApiTagDocumentFilter>();

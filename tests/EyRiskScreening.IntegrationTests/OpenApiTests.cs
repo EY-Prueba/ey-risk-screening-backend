@@ -16,6 +16,8 @@ public sealed class OpenApiTests
         "/api/v1/auth/login",
         "/api/v1/screenings",
         "/api/v1/screenings/{runId}",
+        "/api/v1/suppliers",
+        "/api/v1/suppliers/{supplierId}",
     ];
     private static readonly string[] ScreeningExampleNames =
         ["allSources", "ofac", "offshoreLeaks", "worldBank"];
@@ -128,6 +130,148 @@ public sealed class OpenApiTests
             "Screenings",
             Assert.Single(screening.GetProperty("tags").EnumerateArray())
                 .GetString());
+    }
+
+    [Fact]
+    public async Task SupplierOperationsAndSchemasDescribeTheCrudContract()
+    {
+        using var document = await GetDocumentAsync();
+        var root = document.RootElement;
+        var schemas = root.GetProperty("components").GetProperty("schemas");
+        var collection = root.GetProperty("paths")
+            .GetProperty("/api/v1/suppliers");
+        var item = root.GetProperty("paths")
+            .GetProperty("/api/v1/suppliers/{supplierId}");
+        var create = collection.GetProperty("post");
+        var list = collection.GetProperty("get");
+        var get = item.GetProperty("get");
+        var update = item.GetProperty("put");
+        var delete = item.GetProperty("delete");
+
+        Assert.Equal(
+            "CreateSupplier",
+            create.GetProperty("operationId").GetString());
+        Assert.Equal(
+            "ListSuppliers",
+            list.GetProperty("operationId").GetString());
+        Assert.Equal(
+            "GetSupplier",
+            get.GetProperty("operationId").GetString());
+        Assert.Equal(
+            "UpdateSupplier",
+            update.GetProperty("operationId").GetString());
+        Assert.Equal(
+            "DeleteSupplier",
+            delete.GetProperty("operationId").GetString());
+        foreach (var operation in new[] { create, list, get, update, delete })
+        {
+            AssertBearerSecurity(operation);
+            Assert.Equal(
+                "Suppliers",
+                Assert.Single(operation.GetProperty("tags").EnumerateArray())
+                    .GetString());
+        }
+
+        Assert.True(create
+            .GetProperty("requestBody")
+            .GetProperty("required")
+            .GetBoolean());
+        Assert.True(update
+            .GetProperty("requestBody")
+            .GetProperty("required")
+            .GetBoolean());
+        AssertResponseCodes(
+            create,
+            "201",
+            "400",
+            "401",
+            "403",
+            "409",
+            "500");
+        AssertResponseCodes(list, "200", "400", "401", "403", "500");
+        AssertResponseCodes(get, "200", "401", "403", "404", "500");
+        AssertResponseCodes(
+            update,
+            "200",
+            "400",
+            "401",
+            "403",
+            "404",
+            "409",
+            "500");
+        AssertResponseCodes(delete, "204", "401", "403", "404", "500");
+        Assert.False(delete
+            .GetProperty("responses")
+            .GetProperty("204")
+            .TryGetProperty("content", out _));
+        AssertProblemResponse(create, "409");
+        AssertProblemResponse(update, "409");
+        AssertProblemResponse(get, "404");
+
+        var requestSchema = schemas.GetProperty("SupplierUpsertRequest");
+        AssertRequired(
+            requestSchema,
+            "legalName",
+            "commercialName",
+            "taxId",
+            "phoneNumber",
+            "email",
+            "website",
+            "physicalAddress",
+            "country",
+            "annualBillingUsd");
+        var taxId = requestSchema
+            .GetProperty("properties")
+            .GetProperty("taxId");
+        Assert.Equal("string", taxId.GetProperty("type").GetString());
+        Assert.Equal(11, taxId.GetProperty("minLength").GetInt32());
+        Assert.Equal(11, taxId.GetProperty("maxLength").GetInt32());
+        Assert.Equal("^[0-9]{11}$", taxId.GetProperty("pattern").GetString());
+        var billing = requestSchema
+            .GetProperty("properties")
+            .GetProperty("annualBillingUsd");
+        Assert.Equal("number", billing.GetProperty("type").GetString());
+        Assert.Equal("decimal", billing.GetProperty("format").GetString());
+
+        var responseSchema = schemas.GetProperty("SupplierResponse");
+        AssertRequired(
+            responseSchema,
+            "id",
+            "lastEditedAtUtc",
+            "taxId",
+            "annualBillingUsd");
+        var lastEdited = responseSchema
+            .GetProperty("properties")
+            .GetProperty("lastEditedAtUtc");
+        Assert.Equal(
+            "date-time",
+            lastEdited.GetProperty("format").GetString());
+        Assert.True(lastEdited.GetProperty("readOnly").GetBoolean());
+
+        var parameters = list.GetProperty("parameters")
+            .EnumerateArray()
+            .ToDictionary(
+                parameter => parameter.GetProperty("name").GetString()!,
+                StringComparer.Ordinal);
+        Assert.Equal(
+            ["country", "page", "pageSize", "search", "sortBy", "sortDirection"],
+            parameters.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(
+            1,
+            parameters["page"].GetProperty("schema")
+                .GetProperty("default").GetInt32());
+        Assert.Equal(
+            10,
+            parameters["pageSize"].GetProperty("schema")
+                .GetProperty("default").GetInt32());
+        Assert.Equal(
+            "lastEditedAtUtc",
+            parameters["sortBy"].GetProperty("schema")
+                .GetProperty("default").GetString());
+        Assert.Equal(
+            "desc",
+            parameters["sortDirection"].GetProperty("schema")
+                .GetProperty("default").GetString());
     }
 
     [Fact]

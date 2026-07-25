@@ -23,6 +23,55 @@ internal static class OpenApiExamples
         expiresAtUtc = "2026-07-24T18:30:00Z",
     });
 
+    public static JsonNode SupplierRequest => Json(new
+    {
+        legalName = "PARS TABLEAU COMPANY",
+        commercialName = "Pars Tableau",
+        taxId = "20123456789",
+        phoneNumber = "+51 999 999 999",
+        email = "contact@example.com",
+        website = "https://example.com",
+        physicalAddress = "Av. Ejemplo 123",
+        country = "Peru",
+        annualBillingUsd = 1250000.50m,
+    });
+
+    public static JsonNode SupplierResponse => Json(new
+    {
+        id = "44444444-4444-4444-4444-444444444444",
+        legalName = "PARS TABLEAU COMPANY",
+        commercialName = "Pars Tableau",
+        taxId = "20123456789",
+        phoneNumber = "+51 999 999 999",
+        email = "contact@example.com",
+        website = "https://example.com",
+        physicalAddress = "Av. Ejemplo 123",
+        country = "Peru",
+        annualBillingUsd = 1250000.50m,
+        lastEditedAtUtc = "2026-07-25T03:00:00Z",
+    });
+
+    public static JsonNode SupplierListResponse => Json(new
+    {
+        items = new[] { SupplierResponse },
+        page = 1,
+        pageSize = 10,
+        totalCount = 1,
+        totalPages = 1,
+    });
+
+    public static JsonNode SupplierValidationProblem => Json(new
+    {
+        type = "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        title = "One or more validation errors occurred.",
+        status = 400,
+        traceId = "00-example-trace-id-00",
+        errors = new Dictionary<string, string[]>
+        {
+            ["taxId"] = ["Tax ID must contain exactly 11 ASCII digits."],
+        },
+    });
+
     public static IDictionary<string, IOpenApiExample> ScreeningRequests =>
         new Dictionary<string, IOpenApiExample>(StringComparer.Ordinal)
         {

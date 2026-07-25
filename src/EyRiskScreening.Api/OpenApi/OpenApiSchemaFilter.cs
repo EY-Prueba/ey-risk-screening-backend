@@ -1,5 +1,6 @@
 using EyRiskScreening.Api.Contracts.Authentication;
 using EyRiskScreening.Api.Contracts.Screening;
+using EyRiskScreening.Api.Contracts.Suppliers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -82,6 +83,27 @@ public sealed class OpenApiSchemaFilter : ISchemaFilter
         {
             RequireNonNullableProperties(mutableSchema, "name", "value");
         }
+        else if (context.Type == typeof(SupplierUpsertRequest))
+        {
+            ConfigureSupplierRequest(mutableSchema);
+            mutableSchema.Example = OpenApiExamples.SupplierRequest;
+        }
+        else if (context.Type == typeof(SupplierResponse))
+        {
+            ConfigureSupplierResponse(mutableSchema);
+            mutableSchema.Example = OpenApiExamples.SupplierResponse;
+        }
+        else if (context.Type == typeof(SupplierListResponse))
+        {
+            RequireNonNullableProperties(
+                mutableSchema,
+                "items",
+                "page",
+                "pageSize",
+                "totalCount",
+                "totalPages");
+            mutableSchema.Example = OpenApiExamples.SupplierListResponse;
+        }
     }
 
     private static void ConfigureLoginRequest(OpenApiSchema schema)
@@ -118,6 +140,92 @@ public sealed class OpenApiSchemaFilter : ISchemaFilter
             sourcesSchema.UniqueItems = true;
             sourcesSchema.Description =
                 "One to three unique sources: OffshoreLeaks, WorldBank, or Ofac.";
+        }
+    }
+
+    private static void ConfigureSupplierRequest(OpenApiSchema schema)
+    {
+        ConfigureSupplierFields(schema);
+        RequireNonNullableProperties(
+            schema,
+            "legalName",
+            "commercialName",
+            "taxId",
+            "phoneNumber",
+            "email",
+            "website",
+            "physicalAddress",
+            "country",
+            "annualBillingUsd");
+    }
+
+    private static void ConfigureSupplierResponse(OpenApiSchema schema)
+    {
+        ConfigureSupplierFields(schema);
+        RequireNonNullableProperties(
+            schema,
+            "id",
+            "legalName",
+            "commercialName",
+            "taxId",
+            "phoneNumber",
+            "email",
+            "website",
+            "physicalAddress",
+            "country",
+            "annualBillingUsd",
+            "lastEditedAtUtc");
+        if (schema.Properties?.TryGetValue(
+                "lastEditedAtUtc",
+                out var lastEdited)
+            == true
+            && lastEdited is OpenApiSchema lastEditedSchema)
+        {
+            lastEditedSchema.ReadOnly = true;
+            lastEditedSchema.Format = "date-time";
+        }
+    }
+
+    private static void ConfigureSupplierFields(OpenApiSchema schema)
+    {
+        SetStringLength(schema, "legalName", 2, 200);
+        SetStringLength(schema, "commercialName", 2, 200);
+        SetStringLength(schema, "taxId", 11, 11);
+        SetStringLength(schema, "phoneNumber", 7, 30);
+        SetStringLength(schema, "email", 1, 254);
+        SetStringLength(schema, "website", 1, 2048);
+        SetStringLength(schema, "physicalAddress", 2, 500);
+        SetStringLength(schema, "country", 2, 100);
+        if (schema.Properties?.TryGetValue("taxId", out var taxId) == true
+            && taxId is OpenApiSchema taxIdSchema)
+        {
+            taxIdSchema.Pattern = "^[0-9]{11}$";
+            taxIdSchema.Description =
+                "Eleven-digit ASCII tax identifier represented as a string so leading zeros are preserved.";
+        }
+
+        if (schema.Properties?.TryGetValue("email", out var email) == true
+            && email is OpenApiSchema emailSchema)
+        {
+            emailSchema.Format = "email";
+        }
+
+        if (schema.Properties?.TryGetValue("website", out var website) == true
+            && website is OpenApiSchema websiteSchema)
+        {
+            websiteSchema.Format = "uri";
+        }
+
+        if (schema.Properties?.TryGetValue(
+                "annualBillingUsd",
+                out var annualBilling)
+            == true
+            && annualBilling is OpenApiSchema annualBillingSchema)
+        {
+            annualBillingSchema.Format = "decimal";
+            annualBillingSchema.Minimum = "0";
+            annualBillingSchema.Description =
+                "Annual billing amount in USD, without currency symbols, with at most two decimal places.";
         }
     }
 
@@ -235,6 +343,21 @@ public sealed class OpenApiSchemaFilter : ISchemaFilter
                 Name, Address, Country, From Date, To Date, and Grounds; Offshore
                 Leaks fields include Entity, Jurisdiction, Linked To, and Data From.
                 """;
+        }
+
+        if (type == typeof(SupplierUpsertRequest))
+        {
+            return "Supplier data accepted for create and full update operations. Id and lastEditedAtUtc are server-managed.";
+        }
+
+        if (type == typeof(SupplierResponse))
+        {
+            return "Persisted supplier inventory record.";
+        }
+
+        if (type == typeof(SupplierListResponse))
+        {
+            return "SQL-paginated supplier inventory response.";
         }
 
         if (type == typeof(ProblemDetails))

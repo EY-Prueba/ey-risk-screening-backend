@@ -4,6 +4,7 @@ using EyRiskScreening.Api.OpenApi;
 using EyRiskScreening.Api.Screening;
 using EyRiskScreening.Application;
 using EyRiskScreening.Application.Authentication;
+using EyRiskScreening.Application.Suppliers;
 using EyRiskScreening.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,7 @@ _ = typeof(ApplicationAssemblyMarker);
 _ = typeof(InfrastructureAssemblyMarker);
 
 builder.Services.AddScoped<LoginService>();
+builder.Services.AddScoped<SupplierService>();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScreeningCore(builder.Configuration);
 builder.Services.AddOpenApiDocumentation();

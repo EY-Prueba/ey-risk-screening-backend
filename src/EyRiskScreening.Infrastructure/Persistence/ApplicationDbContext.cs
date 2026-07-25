@@ -1,6 +1,7 @@
 using EyRiskScreening.Domain.Security;
 using EyRiskScreening.Infrastructure.Identity;
 using EyRiskScreening.Infrastructure.Persistence.Screening.Entities;
+using EyRiskScreening.Infrastructure.Persistence.Suppliers;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,8 @@ public sealed class ApplicationDbContext(
     private static readonly Guid AnalystRoleId = new("22222222-2222-2222-2222-222222222222");
 
     internal DbSet<ScreeningRunEntity> ScreeningRuns => Set<ScreeningRunEntity>();
+
+    internal DbSet<SupplierEntity> Suppliers => Set<SupplierEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
