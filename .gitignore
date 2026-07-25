@@ -5,6 +5,7 @@ TestResults/
 coverage/
 *.coverage
 *.coveragexml
+artifacts/deployment/
 
 # IDE and user settings
 .vs/
