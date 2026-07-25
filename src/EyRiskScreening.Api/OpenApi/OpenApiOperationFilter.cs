@@ -27,6 +27,11 @@ public sealed class OpenApiOperationFilter : IOperationFilter
 
         if (context.MethodInfo.DeclaringType != typeof(ScreeningsController))
         {
+            if (context.MethodInfo.DeclaringType == typeof(SuppliersController))
+            {
+                ConfigureSupplierOperation(operation, context);
+            }
+
             return;
         }
 
@@ -39,6 +44,215 @@ public sealed class OpenApiOperationFilter : IOperationFilter
             ConfigureHistory(operation, context);
         }
     }
+
+    private static void ConfigureSupplierOperation(
+        OpenApiOperation operation,
+        OperationFilterContext context)
+    {
+        SetStandardProtectedProblems(operation, context);
+        var methodName = context.MethodInfo.Name;
+        if (methodName == nameof(SuppliersController.Create))
+        {
+            operation.OperationId = "CreateSupplier";
+            operation.Summary = "Create a supplier";
+            RequireRequestBody(operation);
+            SetRequestExample(operation, OpenApiExamples.SupplierRequest);
+            SetResponseExample(
+                operation,
+                "201",
+                OpenApiExamples.SupplierResponse);
+            SetSupplierValidationProblem(operation, context);
+            SetSupplierConflictProblem(operation, context);
+            SetSupplierPersistenceProblem(operation, context);
+            return;
+        }
+
+        if (methodName == nameof(SuppliersController.List))
+        {
+            operation.OperationId = "ListSuppliers";
+            operation.Summary =
+                "List suppliers with filtering, sorting, and pagination";
+            ConfigureSupplierListParameters(operation);
+            SetResponseExample(
+                operation,
+                "200",
+                OpenApiExamples.SupplierListResponse);
+            SetSupplierValidationProblem(operation, context);
+            SetSupplierPersistenceProblem(operation, context);
+            return;
+        }
+
+        ConfigureSupplierIdParameter(operation);
+        if (methodName == nameof(SuppliersController.Get))
+        {
+            operation.OperationId = "GetSupplier";
+            operation.Summary = "Get a supplier by identifier";
+            SetResponseExample(
+                operation,
+                "200",
+                OpenApiExamples.SupplierResponse);
+            SetSupplierNotFoundProblem(operation, context);
+            SetSupplierPersistenceProblem(operation, context);
+        }
+        else if (methodName == nameof(SuppliersController.Update))
+        {
+            operation.OperationId = "UpdateSupplier";
+            operation.Summary = "Replace a supplier";
+            RequireRequestBody(operation);
+            SetRequestExample(operation, OpenApiExamples.SupplierRequest);
+            SetResponseExample(
+                operation,
+                "200",
+                OpenApiExamples.SupplierResponse);
+            SetSupplierValidationProblem(operation, context);
+            SetSupplierNotFoundProblem(operation, context);
+            SetSupplierConflictProblem(operation, context);
+            SetSupplierPersistenceProblem(operation, context);
+        }
+        else if (methodName == nameof(SuppliersController.Delete))
+        {
+            operation.OperationId = "DeleteSupplier";
+            operation.Summary = "Permanently delete a supplier";
+            if (operation.Responses?.TryGetValue(
+                    "204",
+                    out var noContentResponse)
+                == true
+                && noContentResponse is OpenApiResponse mutableResponse)
+            {
+                mutableResponse.Content = null;
+            }
+
+            SetSupplierNotFoundProblem(operation, context);
+            SetSupplierPersistenceProblem(operation, context);
+        }
+    }
+
+    private static void ConfigureSupplierListParameters(
+        OpenApiOperation operation)
+    {
+        foreach (var parameter in operation.Parameters ?? [])
+        {
+            if (parameter is not OpenApiParameter mutableParameter)
+            {
+                continue;
+            }
+
+            var originalName = mutableParameter.Name ?? string.Empty;
+            var parameterName = originalName.ToLowerInvariant() switch
+            {
+                "page" => "page",
+                "pagesize" => "pageSize",
+                "search" => "search",
+                "country" => "country",
+                "sortby" => "sortBy",
+                "sortdirection" => "sortDirection",
+                _ => originalName,
+            };
+            mutableParameter.Name = parameterName;
+            mutableParameter.Description = parameterName switch
+            {
+                "page" => "One-based page number. Default: 1.",
+                "pageSize" =>
+                    "Items per page between 1 and 100. Default: 10.",
+                "search" =>
+                    "Case-insensitive search over legalName, commercialName, and taxId.",
+                "country" =>
+                    "Exact country filter using the database collation.",
+                "sortBy" =>
+                    "Allowed: lastEditedAtUtc, legalName, commercialName, taxId, country, annualBillingUsd.",
+                "sortDirection" => "Allowed: asc or desc. Default: desc.",
+                _ => mutableParameter.Description,
+            };
+
+            if (mutableParameter.Schema is OpenApiSchema schema)
+            {
+                if (parameterName == "page")
+                {
+                    schema.Minimum = "1";
+                    schema.Default = 1;
+                }
+                else if (parameterName == "pageSize")
+                {
+                    schema.Minimum = "1";
+                    schema.Maximum = "100";
+                    schema.Default = 10;
+                }
+                else if (parameterName == "sortBy")
+                {
+                    schema.Default = "lastEditedAtUtc";
+                }
+                else if (parameterName == "sortDirection")
+                {
+                    schema.Default = "desc";
+                }
+            }
+        }
+    }
+
+    private static void ConfigureSupplierIdParameter(
+        OpenApiOperation operation)
+    {
+        var parameter = operation.Parameters?
+            .OfType<OpenApiParameter>()
+            .FirstOrDefault(candidate => candidate.Name == "supplierId");
+        if (parameter is not null)
+        {
+            parameter.Description = "Supplier identifier.";
+        }
+    }
+
+    private static void SetSupplierValidationProblem(
+        OpenApiOperation operation,
+        OperationFilterContext context) =>
+        SetProblemResponse(
+            operation,
+            context,
+            "400",
+            "Supplier data or list query validation failed.",
+            typeof(ValidationProblemDetails),
+            OpenApiExamples.SupplierValidationProblem);
+
+    private static void SetSupplierNotFoundProblem(
+        OpenApiOperation operation,
+        OperationFilterContext context) =>
+        SetProblemResponse(
+            operation,
+            context,
+            "404",
+            "The supplier was not found.",
+            typeof(ProblemDetails),
+            OpenApiExamples.Problem(
+                404,
+                "Not Found",
+                "urn:ey-risk-screening:problem:supplier-not-found"));
+
+    private static void SetSupplierConflictProblem(
+        OpenApiOperation operation,
+        OperationFilterContext context) =>
+        SetProblemResponse(
+            operation,
+            context,
+            "409",
+            "Another supplier already uses the tax identifier.",
+            typeof(ProblemDetails),
+            OpenApiExamples.Problem(
+                409,
+                "Conflict",
+                "urn:ey-risk-screening:problem:supplier-tax-id-conflict"));
+
+    private static void SetSupplierPersistenceProblem(
+        OpenApiOperation operation,
+        OperationFilterContext context) =>
+        SetProblemResponse(
+            operation,
+            context,
+            "500",
+            "The supplier operation could not be persisted.",
+            typeof(ProblemDetails),
+            OpenApiExamples.Problem(
+                500,
+                "Internal Server Error",
+                "urn:ey-risk-screening:problem:supplier-persistence-failed"));
 
     private static void ApplySecurity(
         OpenApiOperation operation,

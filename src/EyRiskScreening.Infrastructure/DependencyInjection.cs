@@ -2,15 +2,18 @@ using EyRiskScreening.Application.Authentication;
 using EyRiskScreening.Application.Screening;
 using EyRiskScreening.Application.Screening.History;
 using EyRiskScreening.Application.Security;
+using EyRiskScreening.Application.Suppliers;
 using EyRiskScreening.Domain.Security;
 using EyRiskScreening.Infrastructure.Identity;
 using EyRiskScreening.Infrastructure.Persistence;
 using EyRiskScreening.Infrastructure.Persistence.Screening;
+using EyRiskScreening.Infrastructure.Persistence.Suppliers;
 using EyRiskScreening.Infrastructure.Screening;
 using EyRiskScreening.Infrastructure.Screening.OffshoreLeaks;
 using EyRiskScreening.Infrastructure.Screening.Ofac;
 using EyRiskScreening.Infrastructure.Screening.WorldBank;
 using EyRiskScreening.Infrastructure.Security;
+using EyRiskScreening.Infrastructure.Suppliers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -216,6 +219,10 @@ public static class DependencyInjection
             IScreeningHistoryFailureReporter,
             LoggingScreeningHistoryFailureReporter>();
         services.AddScoped<IScreeningRunStore, ScreeningRunStore>();
+        services.AddScoped<ISupplierStore, SupplierStore>();
+        services.AddSingleton<
+            ISupplierFailureReporter,
+            LoggingSupplierFailureReporter>();
 
         return services;
     }

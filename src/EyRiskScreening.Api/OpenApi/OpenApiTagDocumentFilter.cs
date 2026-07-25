@@ -22,6 +22,12 @@ public sealed class OpenApiTagDocumentFilter : IDocumentFilter
                 Description =
                     "Execute screenings and retrieve immutable historical snapshots.",
             },
+            new()
+            {
+                Name = "Suppliers",
+                Description =
+                    "Manage the shared supplier inventory used by client applications.",
+            },
         };
     }
 }
