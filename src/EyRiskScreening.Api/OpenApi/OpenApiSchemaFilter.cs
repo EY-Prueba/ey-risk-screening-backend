@@ -19,10 +19,17 @@ public sealed class OpenApiSchemaFilter : ISchemaFilter
 
         if (context.Type == typeof(LoginRequest))
         {
+            ConfigureLoginRequest(mutableSchema);
             mutableSchema.Example = OpenApiExamples.LoginRequest;
         }
         else if (context.Type == typeof(LoginResponse))
         {
+            RequireNonNullableProperties(
+                mutableSchema,
+                "accessToken",
+                "tokenType",
+                "expiresIn",
+                "expiresAtUtc");
             mutableSchema.Example = OpenApiExamples.LoginResponse;
         }
         else if (context.Type == typeof(ScreeningRequest))
@@ -31,16 +38,62 @@ public sealed class OpenApiSchemaFilter : ISchemaFilter
         }
         else if (context.Type == typeof(ScreeningResponse))
         {
+            RequireNonNullableProperties(
+                mutableSchema,
+                "runId",
+                "entityName",
+                "normalizedEntityName",
+                "requestedAtUtc",
+                "completedAtUtc",
+                "totalDurationMs",
+                "status",
+                "totalHits",
+                "totalReturnedResults",
+                "sources");
             mutableSchema.Example = OpenApiExamples.ScreeningSuccess;
         }
-        else if (context.Type == typeof(ValidationProblemDetails))
+        else if (context.Type == typeof(ScreeningSourceResponse))
         {
-            mutableSchema.Example = OpenApiExamples.ValidationProblem;
+            RequireNonNullableProperties(
+                mutableSchema,
+                "source",
+                "status",
+                "matchThreshold",
+                "hits",
+                "returnedResults",
+                "durationMs",
+                "matches");
+            AllowNull(mutableSchema, "error");
         }
+        else if (context.Type == typeof(ScreeningMatchResponse))
+        {
+            RequireNonNullableProperties(
+                mutableSchema,
+                "referenceId",
+                "name",
+                "normalizedName",
+                "overallScore",
+                "tokenSimilarity",
+                "editSimilarity",
+                "isExactMatch",
+                "attributes");
+        }
+        else if (context.Type == typeof(ScreeningSourceAttributeResponse))
+        {
+            RequireNonNullableProperties(mutableSchema, "name", "value");
+        }
+    }
+
+    private static void ConfigureLoginRequest(OpenApiSchema schema)
+    {
+        RequireNonNullableProperties(schema, "userName", "password");
+        SetStringLength(schema, "userName", 1, 256);
+        SetStringLength(schema, "password", 1, 256);
     }
 
     private static void ConfigureScreeningRequest(OpenApiSchema schema)
     {
+        RequireNonNullableProperties(schema, "entityName", "sources");
         if (schema.Properties is null)
         {
             return;
@@ -66,6 +119,80 @@ public sealed class OpenApiSchemaFilter : ISchemaFilter
             sourcesSchema.Description =
                 "One to three unique sources: OffshoreLeaks, WorldBank, or Ofac.";
         }
+    }
+
+    private static void SetStringLength(
+        OpenApiSchema schema,
+        string propertyName,
+        int minimum,
+        int maximum)
+    {
+        if (schema.Properties?.TryGetValue(
+                propertyName,
+                out var property) == true
+            && property is OpenApiSchema propertySchema)
+        {
+            propertySchema.MinLength = minimum;
+            propertySchema.MaxLength = maximum;
+        }
+    }
+
+    private static void RequireNonNullableProperties(
+        OpenApiSchema schema,
+        params string[] propertyNames)
+    {
+        schema.Required ??= new HashSet<string>(StringComparer.Ordinal);
+        foreach (var propertyName in propertyNames)
+        {
+            _ = schema.Required.Add(propertyName);
+            SetAllowsNull(schema, propertyName, allowsNull: false);
+        }
+    }
+
+    private static void AllowNull(
+        OpenApiSchema schema,
+        string propertyName)
+    {
+        if (schema.Properties?.TryGetValue(
+                propertyName,
+                out var property) != true
+            || property is null)
+        {
+            return;
+        }
+
+        if (property is OpenApiSchema propertySchema
+            && propertySchema.Type is not null)
+        {
+            propertySchema.Type =
+                propertySchema.Type.Value | JsonSchemaType.Null;
+            return;
+        }
+
+        schema.Properties[propertyName] = new OpenApiSchema
+        {
+            Type = JsonSchemaType.Object | JsonSchemaType.Null,
+            AllOf = [property],
+        };
+    }
+
+    private static void SetAllowsNull(
+        OpenApiSchema schema,
+        string propertyName,
+        bool allowsNull)
+    {
+        if (schema.Properties?.TryGetValue(
+                propertyName,
+                out var property) != true
+            || property is not OpenApiSchema propertySchema
+            || propertySchema.Type is null)
+        {
+            return;
+        }
+
+        propertySchema.Type = allowsNull
+            ? propertySchema.Type.Value | JsonSchemaType.Null
+            : propertySchema.Type.Value & ~JsonSchemaType.Null;
     }
 
     private static string? DescriptionFor(Type type)

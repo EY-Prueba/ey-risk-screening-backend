@@ -81,6 +81,7 @@ public sealed class OpenApiOperationFilter : IOperationFilter
             issued. Limited to 10 attempts per 60 seconds per remote IP.
             """;
 
+        RequireRequestBody(operation);
         SetRequestExample(operation, OpenApiExamples.LoginRequest);
         SetResponseExample(operation, "200", OpenApiExamples.LoginResponse);
         SetProblemResponse(
@@ -89,7 +90,7 @@ public sealed class OpenApiOperationFilter : IOperationFilter
             "400",
             "The request body failed model validation.",
             typeof(ValidationProblemDetails),
-            OpenApiExamples.ValidationProblem);
+            OpenApiExamples.LoginValidationProblem);
         SetProblemResponse(
             operation,
             context,
@@ -148,6 +149,7 @@ public sealed class OpenApiOperationFilter : IOperationFilter
             determinations of fraud, sanctions status, or legal compliance.
             """;
 
+        RequireRequestBody(operation);
         SetRequestExamples(operation, OpenApiExamples.ScreeningRequests);
         SetResponseExamples(
             operation,
@@ -171,7 +173,7 @@ public sealed class OpenApiOperationFilter : IOperationFilter
             "400",
             "The entity or source selection failed validation.",
             typeof(ValidationProblemDetails),
-            OpenApiExamples.ValidationProblem);
+            OpenApiExamples.ScreeningValidationProblem);
         SetStandardProtectedProblems(operation, context);
         SetProblemResponse(
             operation,
@@ -357,6 +359,14 @@ public sealed class OpenApiOperationFilter : IOperationFilter
         }
     }
 
+    private static void RequireRequestBody(OpenApiOperation operation)
+    {
+        if (operation.RequestBody is OpenApiRequestBody requestBody)
+        {
+            requestBody.Required = true;
+        }
+    }
+
     private static void SetRequestExamples(
         OpenApiOperation operation,
         IDictionary<string, IOpenApiExample> examples)
@@ -388,8 +398,10 @@ public sealed class OpenApiOperationFilter : IOperationFilter
         if (TryGetResponseMediaType(
                 operation,
                 statusCode,
-                out var mediaType))
+                out var mediaType,
+                out var response))
         {
+            KeepOnlyJsonResponse(response, mediaType);
             mediaType.Example = example;
         }
     }
@@ -402,8 +414,10 @@ public sealed class OpenApiOperationFilter : IOperationFilter
         if (TryGetResponseMediaType(
                 operation,
                 statusCode,
-                out var mediaType))
+                out var mediaType,
+                out var response))
         {
+            KeepOnlyJsonResponse(response, mediaType);
             mediaType.Example = null;
             mediaType.Examples = examples;
         }
@@ -412,15 +426,38 @@ public sealed class OpenApiOperationFilter : IOperationFilter
     private static bool TryGetResponseMediaType(
         OpenApiOperation operation,
         string statusCode,
-        out OpenApiMediaType mediaType)
+        out OpenApiMediaType mediaType,
+        out OpenApiResponse response)
     {
         mediaType = null!;
-        return operation.Responses is not null
-            && operation.Responses.TryGetValue(statusCode, out var response)
-            && response.Content is not null
-            && response.Content.TryGetValue(JsonMediaType, out var candidate)
-            && (mediaType = candidate as OpenApiMediaType) is not null;
+        response = null!;
+        if (operation.Responses is null
+            || !operation.Responses.TryGetValue(
+                statusCode,
+                out var candidateResponse)
+            || candidateResponse is not OpenApiResponse mutableResponse
+            || mutableResponse.Content is null
+            || !mutableResponse.Content.TryGetValue(
+                JsonMediaType,
+                out var candidate)
+            || candidate is not OpenApiMediaType mutableMediaType)
+        {
+            return false;
+        }
+
+        response = mutableResponse;
+        mediaType = mutableMediaType;
+        return true;
     }
+
+    private static void KeepOnlyJsonResponse(
+        OpenApiResponse response,
+        OpenApiMediaType mediaType) =>
+        response.Content = new Dictionary<string, OpenApiMediaType>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            [JsonMediaType] = mediaType,
+        };
 
     private static object[] GetEndpointAttributes(
         MethodInfo methodInfo) =>

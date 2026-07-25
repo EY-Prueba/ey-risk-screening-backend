@@ -29,7 +29,7 @@ internal static class OpenApiExamples
             ["ofac"] = Example(
                 "OFAC",
                 "Screen against the official OFAC XML datasets.",
-                Request("BLAIRMORE HOLDINGS, INC.", "Ofac")),
+                Request("BANK MELLI IRAN", "Ofac")),
             ["worldBank"] = Example(
                 "World Bank",
                 "Screen against the World Bank debarred-firms DOM snapshot.",
@@ -51,8 +51,8 @@ internal static class OpenApiExamples
     public static JsonNode ScreeningSuccess => Json(new
     {
         runId = "11111111-1111-1111-1111-111111111111",
-        entityName = "BLAIRMORE HOLDINGS, INC.",
-        normalizedEntityName = "BLAIRMORE HOLDINGS INC",
+        entityName = "BANK MELLI IRAN",
+        normalizedEntityName = "BANK MELLI IRAN",
         requestedAtUtc = "2026-07-24T18:00:00Z",
         completedAtUtc = "2026-07-24T18:00:01Z",
         totalDurationMs = 1000,
@@ -74,17 +74,17 @@ internal static class OpenApiExamples
                 {
                     new
                     {
-                        referenceId = "ofac:12345",
-                        name = "BLAIRMORE HOLDINGS, INC.",
-                        normalizedName = "BLAIRMORE HOLDINGS INC",
+                        referenceId = "12345",
+                        name = "BANK MELLI IRAN",
+                        normalizedName = "BANK MELLI IRAN",
                         overallScore = 100.00m,
                         tokenSimilarity = 100.00m,
                         editSimilarity = 100.00m,
                         isExactMatch = true,
                         attributes = new[]
                         {
+                            new { name = "PrimaryName", value = "BANK MELLI IRAN" },
                             new { name = "Type", value = "Entity" },
-                            new { name = "Program(s)", value = "Example program" },
                             new { name = "List", value = "SDN" },
                         },
                     },
@@ -135,7 +135,19 @@ internal static class OpenApiExamples
         },
     });
 
-    public static JsonNode ValidationProblem => Json(new
+    public static JsonNode LoginValidationProblem => Json(new
+    {
+        type = "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        title = "One or more validation errors occurred.",
+        status = 400,
+        traceId = "00-example-trace-id-00",
+        errors = new Dictionary<string, string[]>
+        {
+            ["userName"] = ["The userName field is required."],
+        },
+    });
+
+    public static JsonNode ScreeningValidationProblem => Json(new
     {
         type = "https://tools.ietf.org/html/rfc9110#section-15.5.1",
         title = "One or more validation errors occurred.",

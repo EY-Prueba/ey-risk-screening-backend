@@ -158,6 +158,8 @@ public sealed class OpenApiTests
             root,
             "/api/v1/screenings/{runId}",
             "get");
+        Assert.True(login.GetProperty("requestBody").GetProperty("required").GetBoolean());
+        Assert.True(screening.GetProperty("requestBody").GetProperty("required").GetBoolean());
         AssertResponseCodes(login, "200", "400", "401", "429", "500");
         AssertResponseCodes(
             screening,
@@ -178,8 +180,22 @@ public sealed class OpenApiTests
         AssertProblemResponse(screening, "400");
         AssertProblemResponse(screening, "429");
         AssertProblemResponse(history, "404");
+        AssertOnlyJsonSuccess(login);
+        AssertOnlyJsonSuccess(screening);
+        AssertOnlyJsonSuccess(history);
         AssertRetryAfter(login);
         AssertRetryAfter(screening);
+
+        var loginValidationExample = ProblemExample(login, "400");
+        var loginValidationErrors = loginValidationExample.GetProperty("errors");
+        Assert.True(loginValidationErrors.TryGetProperty("userName", out _));
+        Assert.False(loginValidationErrors.TryGetProperty("sources", out _));
+        var screeningValidationErrors = ProblemExample(screening, "400")
+            .GetProperty("errors");
+        Assert.True(screeningValidationErrors.TryGetProperty("sources", out _));
+        Assert.False(
+            schemas.GetProperty("ValidationProblemDetails")
+                .TryGetProperty("example", out _));
 
         var loginRequestExample = login
             .GetProperty("requestBody")
@@ -192,6 +208,21 @@ public sealed class OpenApiTests
         Assert.Equal(
             "<password configured locally>",
             loginRequestExample.GetProperty("password").GetString());
+        var loginRequestSchema = schemas.GetProperty("LoginRequest");
+        AssertRequired(
+            loginRequestSchema,
+            "password",
+            "userName");
+        foreach (var propertyName in new[] { "password", "userName" })
+        {
+            var property = loginRequestSchema
+                .GetProperty("properties")
+                .GetProperty(propertyName);
+            Assert.Equal(1, property.GetProperty("minLength").GetInt32());
+            Assert.Equal(256, property.GetProperty("maxLength").GetInt32());
+            AssertDoesNotAllowNull(property);
+        }
+
         var loginResponseExample = login
             .GetProperty("responses")
             .GetProperty("200")
@@ -201,6 +232,19 @@ public sealed class OpenApiTests
         Assert.Equal(
             "Bearer",
             loginResponseExample.GetProperty("tokenType").GetString());
+        var loginResponseSchema = schemas.GetProperty("LoginResponse");
+        AssertRequired(
+            loginResponseSchema,
+            "accessToken",
+            "expiresAtUtc",
+            "expiresIn",
+            "tokenType");
+        AssertDoesNotAllowNull(
+            loginResponseSchema.GetProperty("properties")
+                .GetProperty("accessToken"));
+        AssertDoesNotAllowNull(
+            loginResponseSchema.GetProperty("properties")
+                .GetProperty("tokenType"));
 
         var requestExamples = screening
             .GetProperty("requestBody")
@@ -213,6 +257,12 @@ public sealed class OpenApiTests
                 .Select(example => example.Name)
                 .Order(StringComparer.Ordinal)
                 .ToArray());
+        var ofacRequest = requestExamples
+            .GetProperty("ofac")
+            .GetProperty("value");
+        Assert.Equal(
+            "BANK MELLI IRAN",
+            ofacRequest.GetProperty("entityName").GetString());
 
         var screeningSchema = schemas.GetProperty("ScreeningRequest");
         var sources = screeningSchema
@@ -248,8 +298,21 @@ public sealed class OpenApiTests
             .GetProperty("content")
             .GetProperty("application/json")
             .GetProperty("examples");
-        Assert.True(successExamples.TryGetProperty("completed", out _));
+        Assert.True(successExamples.TryGetProperty("completed", out var completed));
         Assert.True(successExamples.TryGetProperty("partial", out _));
+        var completedValue = completed.GetProperty("value");
+        Assert.Equal(
+            "BANK MELLI IRAN",
+            completedValue.GetProperty("entityName").GetString());
+        var ofacSource = Assert.Single(
+            completedValue.GetProperty("sources").EnumerateArray());
+        Assert.Equal("Ofac", ofacSource.GetProperty("source").GetString());
+        var ofacMatch = Assert.Single(
+            ofacSource.GetProperty("matches").EnumerateArray());
+        Assert.Equal(
+            "BANK MELLI IRAN",
+            ofacMatch.GetProperty("name").GetString());
+        Assert.Equal("12345", ofacMatch.GetProperty("referenceId").GetString());
         var historyRunId = Assert.Single(
             history.GetProperty("parameters").EnumerateArray());
         Assert.Equal("runId", historyRunId.GetProperty("name").GetString());
@@ -257,8 +320,7 @@ public sealed class OpenApiTests
             "uuid",
             historyRunId.GetProperty("schema").GetProperty("format").GetString());
 
-        var loginResponseProperties = schemas
-            .GetProperty("LoginResponse")
+        var loginResponseProperties = loginResponseSchema
             .GetProperty("properties");
         Assert.False(loginResponseProperties.TryGetProperty(
             "refreshToken",
@@ -279,6 +341,27 @@ public sealed class OpenApiTests
             "Jurisdiction",
             sourceAttributeDescription,
             StringComparison.Ordinal);
+
+        var screeningResponseSchema = schemas.GetProperty("ScreeningResponse");
+        AssertRequired(screeningResponseSchema, "sources");
+        AssertDoesNotAllowNull(
+            screeningResponseSchema.GetProperty("properties")
+                .GetProperty("sources"));
+        var sourceResponseSchema = schemas.GetProperty(
+            "ScreeningSourceResponse");
+        AssertRequired(sourceResponseSchema, "matches");
+        AssertDoesNotAllowNull(
+            sourceResponseSchema.GetProperty("properties")
+                .GetProperty("matches"));
+        AssertAllowsNull(
+            sourceResponseSchema.GetProperty("properties")
+                .GetProperty("error"));
+        var matchResponseSchema = schemas.GetProperty(
+            "ScreeningMatchResponse");
+        AssertRequired(matchResponseSchema, "attributes");
+        AssertDoesNotAllowNull(
+            matchResponseSchema.GetProperty("properties")
+                .GetProperty("attributes"));
 
         var body = root.GetRawText();
         Assert.DoesNotContain(
@@ -445,6 +528,75 @@ public sealed class OpenApiTests
         Assert.True(mediaType
             .GetProperty("example")
             .TryGetProperty("traceId", out _));
+    }
+
+    private static JsonElement ProblemExample(
+        JsonElement operation,
+        string statusCode) =>
+        operation
+            .GetProperty("responses")
+            .GetProperty(statusCode)
+            .GetProperty("content")
+            .GetProperty("application/problem+json")
+            .GetProperty("example");
+
+    private static void AssertOnlyJsonSuccess(JsonElement operation)
+    {
+        var mediaTypes = operation
+            .GetProperty("responses")
+            .GetProperty("200")
+            .GetProperty("content")
+            .EnumerateObject()
+            .Select(mediaType => mediaType.Name)
+            .ToArray();
+        Assert.Equal(["application/json"], mediaTypes);
+        Assert.DoesNotContain("text/plain", mediaTypes);
+    }
+
+    private static void AssertRequired(
+        JsonElement schema,
+        params string[] expectedProperties)
+    {
+        var required = schema.GetProperty("required")
+            .EnumerateArray()
+            .Select(property => property.GetString())
+            .ToArray();
+        foreach (var expectedProperty in expectedProperties)
+        {
+            Assert.Contains(expectedProperty, required);
+        }
+    }
+
+    private static void AssertAllowsNull(JsonElement schema)
+    {
+        if (schema.TryGetProperty("nullable", out var nullable))
+        {
+            Assert.True(nullable.GetBoolean());
+            return;
+        }
+
+        Assert.True(
+            schema.TryGetProperty("type", out var type),
+            schema.GetRawText());
+        Assert.Contains(
+            type.EnumerateArray(),
+            item => item.GetString() == "null");
+    }
+
+    private static void AssertDoesNotAllowNull(JsonElement schema)
+    {
+        if (schema.TryGetProperty("nullable", out var nullable))
+        {
+            Assert.False(nullable.GetBoolean());
+        }
+
+        if (schema.TryGetProperty("type", out var type)
+            && type.ValueKind == JsonValueKind.Array)
+        {
+            Assert.DoesNotContain(
+                type.EnumerateArray(),
+                item => item.GetString() == "null");
+        }
     }
 
     private static void AssertRetryAfter(JsonElement operation)
