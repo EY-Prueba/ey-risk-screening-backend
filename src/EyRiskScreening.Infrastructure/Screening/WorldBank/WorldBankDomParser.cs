@@ -169,10 +169,26 @@ internal sealed class WorldBankDomParser(
             cancellationToken.ThrowIfCancellationRequested();
             var fields = CreatePersistableFields(record, dataRetrievedAtUtc);
             ValidatePersistableMatch(record.ReferenceId, record.FirmName, fields);
+            IReadOnlyList<ScreeningSourceAlternativeName> alternativeNames = [];
+            if (record.AlternativeFirmName is not null)
+            {
+                ValidatePersistableMatch(
+                    record.ReferenceId,
+                    record.AlternativeFirmName,
+                    fields);
+                alternativeNames =
+                [
+                    new ScreeningSourceAlternativeName(
+                        record.AlternativeFirmName,
+                        []),
+                ];
+            }
+
             candidates.Add(new ScreeningSourceCandidate(
                 record.ReferenceId,
                 record.FirmName,
-                fields));
+                fields,
+                alternativeNames));
         }
 
         return new ReadOnlyCollection<ScreeningSourceCandidate>(candidates);
@@ -269,7 +285,7 @@ internal sealed class WorldBankDomParser(
         }
 
         var originalName = WorldBankTextNormalizer.Normalize(row[0]);
-        var firmName = RemoveTerminalNoteMarker(originalName);
+        var parsedFirmName = ParseFirmName(originalName);
         var additionalInfo = WorldBankTextNormalizer.Normalize(row[1]);
         var address = WorldBankTextNormalizer.Normalize(row[2]);
         var country = WorldBankTextNormalizer.Normalize(row[3]);
@@ -278,9 +294,17 @@ internal sealed class WorldBankDomParser(
         var grounds = WorldBankTextNormalizer.Normalize(row[6]);
 
         ValidateRequired(
-            firmName,
+            parsedFirmName.PrimaryName,
             ScreeningHistoryLimits.MatchNameRunes,
             "FirmName");
+        if (parsedFirmName.AlternativeName is not null)
+        {
+            ValidateRequired(
+                parsedFirmName.AlternativeName,
+                ScreeningHistoryLimits.MatchNameRunes,
+                "AlternativeFirmName");
+        }
+
         ValidateOptional(
             address,
             ScreeningHistoryLimits.FieldValueRunes,
@@ -334,8 +358,12 @@ internal sealed class WorldBankDomParser(
 
         return new WorldBankRecord(
             referenceId,
-            firmName,
-            string.Equals(originalName, firmName, StringComparison.Ordinal)
+            parsedFirmName.PrimaryName,
+            parsedFirmName.AlternativeName,
+            string.Equals(
+                originalName,
+                parsedFirmName.PrimaryName,
+                StringComparison.Ordinal)
                 ? null
                 : originalName,
             additionalInfo,
@@ -376,15 +404,84 @@ internal sealed class WorldBankDomParser(
             "A World Bank row contains an invalid end date.");
     }
 
+    private static ParsedFirmName ParseFirmName(string value)
+    {
+        var matchingName = RemoveTerminalNoteMarker(value);
+        matchingName = RemoveTerminalRegistrationNumber(matchingName);
+
+        const string alternativePrefix = "(also doing business as ";
+        if (!matchingName.EndsWith(')'))
+        {
+            return new ParsedFirmName(matchingName, null);
+        }
+
+        var annotationStart = matchingName.LastIndexOf('(');
+        if (annotationStart < 0
+            || !matchingName.AsSpan(annotationStart).StartsWith(
+                alternativePrefix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return new ParsedFirmName(matchingName, null);
+        }
+
+        var alternativeStart = annotationStart + alternativePrefix.Length;
+        var alternativeLength =
+            matchingName.Length - alternativeStart - 1;
+        var alternativeName = matchingName
+            .Substring(alternativeStart, alternativeLength)
+            .Trim();
+        var primaryName = matchingName[..annotationStart].TrimEnd();
+        if (primaryName.Length == 0 || alternativeName.Length == 0)
+        {
+            return new ParsedFirmName(matchingName, null);
+        }
+
+        return new ParsedFirmName(primaryName, alternativeName);
+    }
+
     private static string RemoveTerminalNoteMarker(string value)
     {
         const string marker = "(*)";
-        if (!value.EndsWith(marker, StringComparison.Ordinal))
+        if (value.EndsWith(marker, StringComparison.Ordinal))
+        {
+            return value[..^marker.Length].TrimEnd();
+        }
+
+        var markerStart = value.LastIndexOf('*');
+        if (markerStart < 0 || markerStart == value.Length - 1)
         {
             return value;
         }
 
-        return value[..^marker.Length].TrimEnd();
+        foreach (var character in value.AsSpan(markerStart + 1))
+        {
+            if (!char.IsAsciiDigit(character))
+            {
+                return value;
+            }
+        }
+
+        return value[..markerStart].TrimEnd();
+    }
+
+    private static string RemoveTerminalRegistrationNumber(string value)
+    {
+        const string registrationPrefix = "(Reg. No:";
+        if (!value.EndsWith(')'))
+        {
+            return value;
+        }
+
+        var annotationStart = value.LastIndexOf('(');
+        if (annotationStart < 0
+            || !value.AsSpan(annotationStart).StartsWith(
+                registrationPrefix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return value;
+        }
+
+        return value[..annotationStart].TrimEnd();
     }
 
     private static string CreateReferenceId(IEnumerable<string> values)
@@ -530,4 +627,8 @@ internal sealed class WorldBankDomParser(
         int RowSpan,
         string Display,
         bool Hidden);
+
+    private sealed record ParsedFirmName(
+        string PrimaryName,
+        string? AlternativeName);
 }

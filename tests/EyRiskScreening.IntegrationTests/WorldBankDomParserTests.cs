@@ -1,4 +1,5 @@
 using System.Text;
+using EyRiskScreening.Domain.Screening;
 using EyRiskScreening.Domain.Screening.History;
 using EyRiskScreening.Infrastructure.Screening.WorldBank;
 using EyRiskScreening.IntegrationTests.Infrastructure;
@@ -107,6 +108,49 @@ public sealed class WorldBankDomParserTests
                 WorldBankTestData.ValidRow(firmName: "Acme")),
             TestContext.Current.CancellationToken));
         Assert.NotEqual(record.ReferenceId, unmarked.ReferenceId);
+    }
+
+    [Fact]
+    public void OfficialFirmMetadataIsExcludedFromMatchingAndPreserved()
+    {
+        const string originalName =
+            "PARS TABLEAU COMPANY(also doing business as Pars Tableau General Contracting) (Reg. No: 45907) *696";
+        var record = Assert.Single(WorldBankTestData.Parser().Parse(
+            WorldBankTestData.Table(
+                WorldBankTestData.ValidRow(firmName: originalName)),
+            TestContext.Current.CancellationToken));
+        var candidate = Assert.Single(WorldBankDomParser.CreateCandidates(
+            [record],
+            RetrievedAt,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("PARS TABLEAU COMPANY", candidate.Name);
+        var alternative = Assert.Single(candidate.AlternativeNames);
+        Assert.Equal("Pars Tableau General Contracting", alternative.Name);
+        Assert.Equal(originalName, record.OriginalFirmName);
+        Assert.Equal(originalName, Field(candidate, "OriginalFirmName"));
+
+        var score = NameMatchScorer.Score(
+            EntityNameNormalizer.Normalize("Pars Tableau Company, JSC"),
+            EntityNameNormalizer.Normalize(candidate.Name));
+        Assert.True(score.OverallScore >= 80m);
+    }
+
+    [Fact]
+    public void NumericNoteAndRegistrationAreRemovedOnlyAtTheEnd()
+    {
+        const string originalName =
+            "CHINA NATIONAL TECHNICAL IMPORT & EXPORT CORPORATION OGRANAK BEOGRAD(Reg. No: 29508933) *720";
+        var record = Assert.Single(WorldBankTestData.Parser().Parse(
+            WorldBankTestData.Table(
+                WorldBankTestData.ValidRow(firmName: originalName)),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            "CHINA NATIONAL TECHNICAL IMPORT & EXPORT CORPORATION OGRANAK BEOGRAD",
+            record.FirmName);
+        Assert.Null(record.AlternativeFirmName);
+        Assert.Equal(originalName, record.OriginalFirmName);
     }
 
     [Fact]

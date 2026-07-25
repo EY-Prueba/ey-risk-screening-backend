@@ -39,6 +39,7 @@ internal sealed record WorldBankHeaderCell(
 internal sealed record WorldBankRecord(
     string ReferenceId,
     string FirmName,
+    string? AlternativeFirmName,
     string? OriginalFirmName,
     string AdditionalFirmInfo,
     string Address,
