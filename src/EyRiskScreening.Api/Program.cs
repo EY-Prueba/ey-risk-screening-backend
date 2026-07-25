@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json.Serialization;
+using EyRiskScreening.Api.OpenApi;
 using EyRiskScreening.Api.Screening;
 using EyRiskScreening.Application;
 using EyRiskScreening.Application.Authentication;
@@ -18,6 +19,7 @@ _ = typeof(InfrastructureAssemblyMarker);
 builder.Services.AddScoped<LoginService>();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScreeningCore(builder.Configuration);
+builder.Services.AddOpenApiDocumentation();
 
 builder.Services.AddProblemDetails(options =>
 {
@@ -77,6 +79,7 @@ app.UseStatusCodePages(async statusCodeContext =>
     });
 });
 
+app.UseOpenApiDocumentation(builder.Configuration);
 app.UseRouting();
 app.UseCors(corsPolicyName);
 app.UseAuthentication();
